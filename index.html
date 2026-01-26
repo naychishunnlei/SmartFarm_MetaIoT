@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>project_testing</title>
+  </head>
+  <body>
+    <!-- ESP32 Status Display -->
+    <div id="status-panel">
+      <div class="status-item">
+        <span class="label">ESP32:</span>
+        <span id="esp32-status" class="status">Connecting...</span>
+      </div>
+      <div class="status-item">
+        <span class="label">Light:</span>
+        <span id="light-status" class="status">ON</span>
+      </div>
+    </div>
+    
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
