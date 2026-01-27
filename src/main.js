@@ -213,7 +213,16 @@ function updateLightVisual(state) {
     lightStatusElement.textContent = state ? 'ON' : 'OFF'
     lightStatusElement.style.color = state ? '#4ade80' : '#ef4444'
   }
-  
+
+  if(lightSwitch) {
+    if(state) {
+      // ON position - Blender: -18.93 degrees converted to Z axis for up-down motion
+      lightSwitch.rotation.z = 18.93 * (Math.PI / 180)
+    } else {
+      // OFF position - Blender: -0.6 degrees converted to Z axis for up-down motion
+      lightSwitch.rotation.z = -0.6 * (Math.PI / 180)
+    }
+  }  
   // Toggle bulb brightness/material
   if (lightBulb) {
     if (state) {
