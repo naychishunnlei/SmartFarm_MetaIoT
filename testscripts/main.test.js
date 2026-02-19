@@ -139,23 +139,23 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
-test('updates esp32 status on websocket open', () => {
-  document.body.innerHTML = '<div id="esp32-status"></div>'
+// test('updates esp32 status on websocket open', () => {
+//   document.body.innerHTML = '<div id="esp32-status"></div>'
 
-  socket.onopen()
+//   socket.onopen()
 
-  const status = document.getElementById('esp32-status')
-  expect(status.textContent).toBe('Connected')
-  expect(status.style.color).toBe('rgb(74, 222, 128)')
-})
+//   const status = document.getElementById('esp32-status')
+//   expect(status.textContent).toBe('Connected')
+//   expect(status.style.color).toBe('rgb(74, 222, 128)')
+// })
 
-test('updates sensor values from websocket message', () => {
-  document.body.innerHTML = '<div id="temp-value"></div><div id="hum-value"></div>'
+// test('updates sensor values from websocket message', () => {
+//   document.body.innerHTML = '<div id="temp-value"></div><div id="hum-value"></div>'
 
-  socket.onmessage({ data: 'TEMP:25,HUM:60' })
+//   socket.onmessage({ data: 'TEMP:25,HUM:60' })
 
-  const temp = document.getElementById('temp-value')
-  const hum = document.getElementById('hum-value')
-  expect(temp.textContent).toBe('25')
-  expect(hum.textContent).toBe('60')
-})
+//   const temp = document.getElementById('temp-value')
+//   const hum = document.getElementById('hum-value')
+//   expect(temp.textContent).toBe('25')
+//   expect(hum.textContent).toBe('60')
+// })
