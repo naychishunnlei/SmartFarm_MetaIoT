@@ -3,6 +3,8 @@
 import { jest } from '@jest/globals'
 
 const mockWebSocketInstances = []
+let loaderModelRef = null
+let displayCubeRef = null
 
 class MockWebSocket {
   constructor(url) {
@@ -23,6 +25,13 @@ class MockWebSocket {
 global.WebSocket = MockWebSocket
 global.fetch = jest.fn(() => Promise.resolve({}))
 global.requestAnimationFrame = jest.fn()
+HTMLCanvasElement.prototype.getContext = jest.fn(() => ({
+  clearRect: jest.fn(),
+  fillRect: jest.fn(),
+  fillText: jest.fn(),
+  fillStyle: '#000000',
+  font: '12px Arial'
+}))
 
 jest.unstable_mockModule('three', () => {
   class Scene {
@@ -122,7 +131,28 @@ jest.unstable_mockModule('three/examples/jsm/controls/OrbitControls.js', () => (
 
 jest.unstable_mockModule('three/examples/jsm/loaders/GLTFLoader.js', () => ({
   GLTFLoader: class {
-    load() {}
+    load(url, onLoad) {
+      const clonedMaterial = {
+        needsUpdate: false
+      }
+      const baseMaterial = {
+        clone: jest.fn(() => clonedMaterial)
+      }
+
+      const lightSwitch = { name: 'Switch', rotation: { z: 0 } }
+      const lightBulb = { name: 'Bulb', material: { emissive: null, emissiveIntensity: 0 } }
+      displayCubeRef = { name: 'Cube', material: baseMaterial }
+
+      loaderModelRef = {
+        rotation: { y: 0 },
+        children: [lightSwitch, lightBulb, displayCubeRef],
+        traverse(callback) {
+          this.children.forEach((child) => callback(child))
+        }
+      }
+
+      onLoad({ scene: loaderModelRef })
+    }
   }
 }))
 
@@ -139,23 +169,16 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
-// test('updates esp32 status on websocket open', () => {
-//   document.body.innerHTML = '<div id="esp32-status"></div>'
+test('loads the 3D model and rotates it to face the camera', () => {
+  expect(loaderModelRef).not.toBeNull()
+  expect(loaderModelRef.rotation.y).toBeCloseTo(Math.PI / 2)
+})
 
-//   socket.onopen()
-
-//   const status = document.getElementById('esp32-status')
-//   expect(status.textContent).toBe('Connected')
-//   expect(status.style.color).toBe('rgb(74, 222, 128)')
-// })
-
-// test('updates sensor values from websocket message', () => {
-//   document.body.innerHTML = '<div id="temp-value"></div><div id="hum-value"></div>'
-
-//   socket.onmessage({ data: 'TEMP:25,HUM:60' })
-
-//   const temp = document.getElementById('temp-value')
-//   const hum = document.getElementById('hum-value')
-//   expect(temp.textContent).toBe('25')
-//   expect(hum.textContent).toBe('60')
-// })
+test('sets up display cube material for the UI screen', () => {
+  expect(displayCubeRef).not.toBeNull()
+  expect(displayCubeRef.material.map).toBeDefined()
+  expect(displayCubeRef.material.emissive.value).toBe(0xffffff)
+  expect(displayCubeRef.material.emissiveIntensity).toBe(1)
+  expect(displayCubeRef.material.toneMapped).toBe(false)
+  expect(displayCubeRef.material.needsUpdate).toBe(true)
+})
