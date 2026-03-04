@@ -757,66 +757,220 @@ function createSprinklerHead() {
 
 function createTrees(scene, farmElements) {
   const positions = [
-    [-20, 0, -20], [30, 0, -25], [-25, 0, 20], [35, 0, 25]
+    { pos: [-20, 0, -20], type: 'realistic' },
+    { pos: [30, 0, -25], type: 'stylized' },
+    { pos: [-25, 0, 20], type: 'stylized' },
+    { pos: [35, 0, 25], type: 'realistic' },
+    { pos: [-30, 0, 0], type: 'stylized' },
+    { pos: [40, 0, 0], type: 'stylized' },
   ];
 
-  positions.forEach(pos => {
-    // Trunk with texture-like appearance
-    const trunkGeometry = new THREE.CylinderGeometry(0.5, 0.7, 5, 12);
-    const trunkMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0x654321,
-      roughness: 0.95,
-      metalness: 0.1
-    });
-    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-    trunk.position.set(pos[0], 2.5, pos[2]);
-    trunk.castShadow = true;
-    scene.add(trunk);
+  positions.forEach((treeData, treeIndex) => {
+    const pos = treeData.pos;
+    const treeScale = 0.8 + Math.random() * 0.4;
 
-    // Multiple foliage layers for more realistic tree
-    const foliageColors = [0x228B22, 0x2E8B57, 0x006400];
-    
-    // Bottom layer (larger)
-    const foliage1 = new THREE.Mesh(
-      new THREE.SphereGeometry(3.5, 8, 8),
-      new THREE.MeshStandardMaterial({ 
-        color: foliageColors[0],
-        roughness: 0.9
-      })
-    );
-    foliage1.position.set(pos[0], 5.5, pos[2]);
-    foliage1.scale.set(1, 0.8, 1);
-    foliage1.castShadow = true;
-    scene.add(foliage1);
-
-    // Middle layer
-    const foliage2 = new THREE.Mesh(
-      new THREE.SphereGeometry(3, 8, 8),
-      new THREE.MeshStandardMaterial({ 
-        color: foliageColors[1],
-        roughness: 0.85
-      })
-    );
-    foliage2.position.set(pos[0], 6.5, pos[2]);
-    foliage2.scale.set(0.9, 0.7, 0.9);
-    foliage2.castShadow = true;
-    scene.add(foliage2);
-
-    // Top layer (smaller)
-    const foliage3 = new THREE.Mesh(
-      new THREE.SphereGeometry(2, 8, 8),
-      new THREE.MeshStandardMaterial({ 
-        color: foliageColors[2],
-        roughness: 0.8
-      })
-    );
-    foliage3.position.set(pos[0], 7.5, pos[2]);
-    foliage3.scale.set(0.8, 0.6, 0.8);
-    foliage3.castShadow = true;
-    scene.add(foliage3);
+    if (treeData.type === 'stylized') {
+      createStylizedTree(scene, pos, treeScale);
+    } else {
+      createRealisticTree(scene, pos, treeScale);
+    }
   });
 }
 
+function createStylizedTree(scene, pos, scale) {
+  const treeGroup = new THREE.Group();
+  
+  // Random tree color palette (like in the reference image)
+  const colorPalettes = [
+    { trunk: 0x8B4513, foliage: [0x2d5a27, 0x3a7d32, 0x4a9c3d] },      // Green
+    { trunk: 0x8B4513, foliage: [0xff9966, 0xff7744, 0xff5522] },      // Orange/Coral
+    { trunk: 0x8B4513, foliage: [0xffcc00, 0xffdd33, 0xffee66] },      // Yellow
+    { trunk: 0x8B4513, foliage: [0xff6b8a, 0xff8fa3, 0xffb3c1] },      // Pink
+    { trunk: 0x6B4423, foliage: [0x228b22, 0x32cd32, 0x90ee90] },      // Light Green
+  ];
+  
+  const palette = colorPalettes[Math.floor(Math.random() * colorPalettes.length)];
+  const trunkHeight = 2 + Math.random() * 1.5;
+  
+  // Simple cylindrical trunk
+  const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.35, trunkHeight, 8);
+  const trunkMaterial = new THREE.MeshStandardMaterial({
+    color: palette.trunk,
+    roughness: 0.9,
+    metalness: 0.0,
+    flatShading: true
+  });
+  const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+  trunk.position.y = trunkHeight / 2;
+  trunk.castShadow = true;
+  trunk.receiveShadow = true;
+  treeGroup.add(trunk);
+
+  // Stacked cones for foliage (3-4 layers)
+  const numLayers = 3 + Math.floor(Math.random() * 2);
+  let currentY = trunkHeight;
+  
+  for (let i = 0; i < numLayers; i++) {
+    const layerProgress = i / (numLayers - 1);
+    const coneRadius = 2.5 - layerProgress * 1.2 - Math.random() * 0.3;
+    const coneHeight = 2.2 - layerProgress * 0.5;
+    
+    const coneGeometry = new THREE.ConeGeometry(coneRadius, coneHeight, 8);
+    const coneMaterial = new THREE.MeshStandardMaterial({
+      color: palette.foliage[i % palette.foliage.length],
+      roughness: 0.8,
+      metalness: 0.0,
+      flatShading: true
+    });
+    
+    const cone = new THREE.Mesh(coneGeometry, coneMaterial);
+    cone.position.y = currentY + coneHeight * 0.35;
+    cone.castShadow = true;
+    cone.receiveShadow = true;
+    treeGroup.add(cone);
+    
+    currentY += coneHeight * 0.5;
+  }
+
+  // Scale and position
+  treeGroup.scale.set(scale, scale, scale);
+  treeGroup.position.set(pos[0], pos[1], pos[2]);
+  treeGroup.rotation.y = Math.random() * Math.PI * 2;
+  
+  scene.add(treeGroup);
+}
+
+function createRealisticTree(scene, pos, scale) {
+  const treeGroup = new THREE.Group();
+  const trunkHeight = 4 + Math.random() * 2;
+
+  // Main trunk
+  const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.6, trunkHeight, 8);
+  const trunkMaterial = new THREE.MeshStandardMaterial({
+    color: 0x4a3728,
+    roughness: 1.0,
+    metalness: 0.0
+  });
+  const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+  trunk.position.y = trunkHeight / 2;
+  trunk.castShadow = true;
+  trunk.receiveShadow = true;
+  treeGroup.add(trunk);
+
+  // Bark texture detail
+  for (let i = 0; i < 5; i++) {
+    const barkGeometry = new THREE.CylinderGeometry(0.05, 0.08, 0.8, 6);
+    const barkMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x3d2b1f,
+      roughness: 1.0
+    });
+    const bark = new THREE.Mesh(barkGeometry, barkMaterial);
+    const angle = (i / 5) * Math.PI * 2 + Math.random() * 0.5;
+    const heightOffset = 0.5 + Math.random() * (trunkHeight - 1);
+    bark.position.set(
+      Math.cos(angle) * 0.35,
+      heightOffset,
+      Math.sin(angle) * 0.35
+    );
+    bark.rotation.z = (Math.random() - 0.5) * 0.3;
+    treeGroup.add(bark);
+  }
+
+  // Branches
+  const branchMaterial = new THREE.MeshStandardMaterial({
+    color: 0x5c4033,
+    roughness: 0.95
+  });
+
+  const numBranches = 4 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < numBranches; i++) {
+    const branchLength = 1.5 + Math.random() * 1.5;
+    const branchGeometry = new THREE.CylinderGeometry(0.05, 0.15, branchLength, 6);
+    const branch = new THREE.Mesh(branchGeometry, branchMaterial);
+    
+    const angle = (i / numBranches) * Math.PI * 2 + Math.random() * 0.5;
+    const heightPos = trunkHeight * 0.6 + Math.random() * (trunkHeight * 0.3);
+    
+    branch.position.set(
+      Math.cos(angle) * 0.3,
+      heightPos,
+      Math.sin(angle) * 0.3
+    );
+    branch.rotation.z = Math.PI / 3 + Math.random() * 0.3;
+    branch.rotation.y = angle;
+    branch.castShadow = true;
+    treeGroup.add(branch);
+  }
+
+  // Foliage clusters
+  const foliageColors = [0x2d5a27, 0x3a7d32, 0x4a9c3d, 0x2e8b57, 0x228b22];
+  const foliageGroup = new THREE.Group();
+  foliageGroup.position.y = trunkHeight + 1;
+
+  const clusterPositions = [
+    { x: 0, y: 0, z: 0, size: 2.5 },
+    { x: 1.2, y: -0.5, z: 0.8, size: 2.0 },
+    { x: -1.0, y: -0.3, z: 1.0, size: 1.8 },
+    { x: 0.8, y: -0.8, z: -1.2, size: 2.2 },
+    { x: -1.2, y: -0.6, z: -0.8, size: 1.9 },
+    { x: 0, y: 1.2, z: 0, size: 1.5 },
+  ];
+
+  clusterPositions.forEach((cluster, i) => {
+    const foliageGeometry = new THREE.IcosahedronGeometry(cluster.size, 1);
+    const foliageMaterial = new THREE.MeshStandardMaterial({ 
+      color: foliageColors[i % foliageColors.length],
+      roughness: 0.9,
+      flatShading: true
+    });
+    const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+    
+    foliage.position.set(
+      cluster.x + (Math.random() - 0.5) * 0.3,
+      cluster.y + (Math.random() - 0.5) * 0.2,
+      cluster.z + (Math.random() - 0.5) * 0.3
+    );
+    foliage.scale.set(
+      1 + (Math.random() - 0.5) * 0.2,
+      0.8 + Math.random() * 0.3,
+      1 + (Math.random() - 0.5) * 0.2
+    );
+    foliage.castShadow = true;
+    foliage.receiveShadow = true;
+    foliageGroup.add(foliage);
+  });
+
+  treeGroup.add(foliageGroup);
+
+  // Roots
+  const rootMaterial = new THREE.MeshStandardMaterial({ 
+    color: 0x4a3728,
+    roughness: 1.0
+  });
+
+  for (let i = 0; i < 5; i++) {
+    const rootLength = 0.8 + Math.random() * 0.6;
+    const rootGeometry = new THREE.CylinderGeometry(0.03, 0.12, rootLength, 5);
+    const root = new THREE.Mesh(rootGeometry, rootMaterial);
+    
+    const angle = (i / 5) * Math.PI * 2 + Math.random() * 0.3;
+    root.position.set(
+      Math.cos(angle) * 0.4,
+      0.1,
+      Math.sin(angle) * 0.4
+    );
+    root.rotation.z = Math.PI / 2.5;
+    root.rotation.y = angle;
+    treeGroup.add(root);
+  }
+
+  // Scale and position
+  treeGroup.scale.set(scale, scale, scale);
+  treeGroup.position.set(pos[0], pos[1], pos[2]);
+  treeGroup.rotation.y = Math.random() * Math.PI * 2;
+  
+  scene.add(treeGroup);
+}
 function createFences(scene, farmElements) {
   const fenceMaterial = new THREE.MeshStandardMaterial({ 
     color: 0x8B4513,

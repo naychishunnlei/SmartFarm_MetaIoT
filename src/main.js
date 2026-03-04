@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createScene } from './scene.js';
 import { createFarm } from './farm.js';
 import { setUpControls } from './controls.js';
+import { createAvatar, AvatarController } from './avatar.js';
 
 class FarmVerse {
   constructor() {
@@ -12,6 +13,7 @@ class FarmVerse {
     this.lightsActive = false;
     this.panelOpen = false;
     this.nearPlant = false;
+    this.useAvatarCamera = true; // Toggle between avatar and free camera
     
     this.init().then(() => {
       this.setupEventListeners();
@@ -37,11 +39,51 @@ class FarmVerse {
     // Create farm elements (async - loads models)
     this.farmElements = await createFarm(this.scene);
 
-    // Setup controls
+    // Create avatar and controller
+    this.avatar = createAvatar(this.scene);
+    this.avatar.position.set(0, 0, 5); // Starting position
+    this.avatarController = new AvatarController(this.avatar, this.camera);
+
+    // Setup orbit controls (for free camera mode)
     this.controls = setUpControls(this.camera, this.renderer.domElement);
+    this.controls.enabled = !this.useAvatarCamera; // Disable if using avatar camera
 
     // Handle window resize
     window.addEventListener('resize', () => this.onWindowResize());
+    
+    // Add instructions UI
+    this.addInstructionsUI();
+  }
+
+  addInstructionsUI() {
+    const instructions = document.createElement('div');
+    instructions.id = 'avatar-instructions';
+    instructions.innerHTML = `
+      <div style="
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 10px;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        z-index: 1000;
+      ">
+        <div style="font-weight: bold; margin-bottom: 10px; color: #4CAF50;">🧑‍🌾 Avatar Controls</div>
+        <div style="margin-bottom: 5px;"><kbd style="background: #444; padding: 2px 8px; border-radius: 3px;">W</kbd> Move Forward</div>
+        <div style="margin-bottom: 5px;"><kbd style="background: #444; padding: 2px 8px; border-radius: 3px;">S</kbd> Move Backward</div>
+        <div style="margin-bottom: 5px;"><kbd style="background: #444; padding: 2px 8px; border-radius: 3px;">A</kbd> Turn Left</div>
+        <div style="margin-bottom: 5px;"><kbd style="background: #444; padding: 2px 8px; border-radius: 3px;">D</kbd> Turn Right</div>
+        <div style="margin-bottom: 5px;"><kbd style="background: #444; padding: 2px 8px; border-radius: 3px;">Q</kbd> Move Sideway Left</div>
+        <div style="margin-bottom: 5px;"><kbd style="background: #444; padding: 2px 8px; border-radius: 3px;">R</kbd> Move Sideway Right</div>
+        <div style="margin-bottom: 5px;"><kbd style="background: #444; padding: 2px 8px; border-radius: 3px;">Shift</kbd> Run</div>
+        <div style="margin-top: 10px;"><kbd style="background: #444; padding: 2px 8px; border-radius: 3px;">V</kbd> Toggle Camera Zoom</div>
+        <div style="margin-bottom: 5px;"><kbd style="background: #444; padding: 2px 8px; border-radius: 3px;">C</kbd> Toggle Camera Mode</div>
+      </div>
+    `;
+    document.body.appendChild(instructions);
   }
 
   setupEventListeners() {
@@ -84,6 +126,16 @@ class FarmVerse {
         this.openPanel();
       } else if (event.code === 'Escape' && this.panelOpen) {
         this.closePanel();
+      } else if (event.code === 'KeyC') {
+        // Toggle camera mode
+        this.useAvatarCamera = !this.useAvatarCamera;
+        this.controls.enabled = !this.useAvatarCamera;
+        
+        if (!this.useAvatarCamera) {
+          // Reset camera to overview position
+          this.camera.position.set(30, 25, 30);
+          this.camera.lookAt(0, 0, 0);
+        }
       }
     });
   }
@@ -108,10 +160,15 @@ class FarmVerse {
   animate() {
     requestAnimationFrame(() => this.animate());
 
-    // Update controls
-    this.controls.update();
+    // Update avatar controller
+    if (this.useAvatarCamera) {
+      this.avatarController.update();
+    } else {
+      // Update orbit controls when in free camera mode
+      this.controls.update();
+    }
 
-    // Check proximity to plants
+    // Check proximity to plants (use avatar position instead of camera)
     this.checkPlantProximity();
 
     // Update farm animations
@@ -130,10 +187,15 @@ class FarmVerse {
     const proximityDistance = 5; // Distance to trigger popup
     let isNearPlant = false;
 
+    // Use avatar position for proximity check
+    const checkPosition = this.useAvatarCamera 
+      ? this.avatar.position 
+      : this.camera.position;
+
     // Check distance to all crops
     if (this.farmElements && this.farmElements.crops) {
       for (let crop of this.farmElements.crops) {
-        const distance = this.camera.position.distanceTo(crop.position);
+        const distance = checkPosition.distanceTo(crop.position);
         if (distance < proximityDistance) {
           isNearPlant = true;
           break;
@@ -162,11 +224,10 @@ class FarmVerse {
     const humidity = (60 + Math.cos(Date.now() * 0.0008) * 15).toFixed(1);
 
     document.getElementById('soil-moisture').textContent = `${moisture}%`;
-    document.getElementById('temperature').textContent = `${temp}°C`;
-    document.getElementById('humidity').textContent = `${humidity}%`;
   }
 }
 
-// Initialize the application
-new FarmVerse();
-
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  new FarmVerse();
+});
