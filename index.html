@@ -1,25 +1,58 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>project_testing</title>
-  </head>
-  <body>
-    <!-- ESP32 Status Display -->
-    <div id="status-panel">
-      <div class="status-item">
-        <span class="label">ESP32:</span>
-        <span id="esp32-status" class="status">Connecting...</span>
-      </div>
-      <div class="status-item">
-        <span class="label">Light:</span>
-        <span id="light-status" class="status">ON</span>
-      </div>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FarmVerse - Virtual Smart Farm</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <div id="canvas-container"></div>
+        
+        <!-- Proximity Popup -->
+        <div id="proximity-popup" class="proximity-popup" style="display: none;">
+            <p>Press <strong>E</strong> to view plant data</p>
+        </div>
+
+        <!-- Control Panel (hidden by default) -->
+        <div id="control-panel" class="panel" style="display: none;">
+            <button id="close-panel" class="close-btn">×</button>
+            <h1>FarmVerse</h1>
+            <div class="controls">
+                <h3>Farm Monitor</h3>
+                <div class="sensor-data">
+                    <div class="sensor-item">
+                        <span>Soil Moisture:</span>
+                        <span id="soil-moisture">--</span>
+                    </div>
+                    <div class="sensor-item">
+                        <span>Temperature:</span>
+                        <span id="temperature">--</span>
+                    </div>
+                    <div class="sensor-item">
+                        <span>Humidity:</span>
+                        <span id="humidity">--</span>
+                    </div>
+                </div>
+                <div class="actuator-controls">
+                    <h3>Farm Controls</h3>
+                    <button id="toggle-irrigation" class="btn">Toggle Irrigation</button>
+                    <button id="toggle-sprinkler" class="btn">Toggle Sprinkler</button>
+                </div>
+                <div class="actuator-controls">
+                    <h3>Greenhouse Controls</h3>
+                    <button id="toggle-fan" class="btn">Toggle Fan</button>
+                    <button id="toggle-lights" class="btn">Toggle Lights</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div id="instructions" class="instructions">
+            <p><strong>Controls:</strong> Left Click + Drag to rotate | Right Click + Drag to pan | Scroll to zoom | Walk near plants to view data</p>
+        </div>
     </div>
-    
-    <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
-  </body>
+</body>
 </html>
