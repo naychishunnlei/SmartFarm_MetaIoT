@@ -91,7 +91,7 @@
 
                     <!-- Infrastructure Category -->
                     <div class="category-content" id="infrastructure-category">
-                        <div class="category-title">🏗️ Infrastructure</div>
+                        <div class="category-title">Infrastructure</div>
                         <div class="object-options">
                             <button class="object-btn" data-object="soilBed">
                                 <span class="object-emoji">🟫</span>
@@ -122,7 +122,7 @@
 
                     <!-- IoT Devices Category -->
                     <div class="category-content" id="iot-category">
-                        <div class="category-title">📡 IoT Devices</div>
+                        <div class="category-title">Devices & Sensors</div>
                         <div class="object-options">
                             <button class="object-btn" data-object="moistureSensor">
                                 <span class="object-emoji">💧</span>
@@ -144,16 +144,16 @@
                                 <span class="object-emoji">🚿</span>
                                 <span class="object-name">Sprinkler</span>
                             </button>
-                            <button class="object-btn" data-object="esp32">
-                                <span class="object-emoji">🔌</span>
-                                <span class="object-name">ESP32</span>
+                            <button class="object-btn" data-object="fan">
+                                <span class="object-emoji">🌀</span>
+                                <span class="object-name">Fan</span>
                             </button>
                         </div>
                     </div>
 
                     <!-- Animals Category -->
                     <div class="category-content" id="animals-category">
-                        <div class="category-title">🐄 Farm Animals</div>
+                        <div class="category-title">Farm Animals</div>
                         <div class="object-options">
                             <button class="object-btn" data-object="chicken">
                                 <span class="object-emoji">🐔</span>
@@ -184,7 +184,7 @@
 
                     <!-- Environment Category -->
                     <div class="category-content" id="environment-category">
-                        <div class="category-title">🌳 Environment</div>
+                        <div class="category-title">Environment</div>
                         <div class="object-options">
                             <button class="object-btn" data-object="tree">
                                 <span class="object-emoji">🌳</span>
@@ -216,10 +216,10 @@
                     <div class="panel-divider"></div>
                     <div class="panel-actions">
                         <button id="delete-mode-btn" class="action-btn">
-                            🗑️ Delete Mode
+                            Delete Mode
                         </button>
                         <button id="clear-all-btn" class="action-btn danger">
-                            ✖️ Clear All
+                            Clear All
                         </button>
                     </div>
                 </div>
@@ -228,18 +228,20 @@
             <!-- Context Menu (right-click popup) -->
             <div id="context-menu" class="context-menu">
                 <div class="context-menu-header">
-                    <span id="context-object-emoji">📦</span>
+                    <span id="context-object-emoji"></span>
                     <span id="context-object-name">Object</span>
                 </div>
                 <div class="context-menu-body">
                     <div class="context-status">
                         <span class="status-label">Status:</span>
-                        <span class="status-value">Active ✓</span>
+                        <!-- need to change according to obj's state -->
+                        <span class="status-value" id="context-status-value">Active</span>
                     </div>
                 </div>
                 <div class="context-menu-actions">
+                    <button id="context-toggle-btn" class="context-btn" style="display: none;">Turn On</button>
                     <button id="context-delete-btn" class="context-btn danger">
-                        🗑️ Delete
+                        Delete
                     </button>
                 </div>
             </div>
@@ -247,19 +249,19 @@
             <!-- Bottom Instructions -->
             <div class="instructions">
                 <div class="instruction-item">
-                    <span class="key">🖱️ Click</span>
+                    <span class="key">Click</span>
                     <span>Place item</span>
                 </div>
                 <div class="instruction-item">
-                    <span class="key">🔄 Drag</span>
+                    <span class="key">Drag</span>
                     <span>Rotate view</span>
                 </div>
                 <div class="instruction-item">
-                    <span class="key">📏 Scroll</span>
+                    <span class="key">Scroll</span>
                     <span>Zoom</span>
                 </div>
                 <div class="instruction-item">
-                    <span class="key">🖱️ Right-click</span>
+                    <span class="key">Right-click</span>
                     <span>Object menu</span>
                 </div>
             </div>
