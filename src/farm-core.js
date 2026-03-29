@@ -324,8 +324,66 @@ function setupLighting() {
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
+
+    // Update active sprinkler water particles (when isRunning === true)
+    objects.forEach(obj => {
+        if (obj.userData.type === 'sprinkler' && obj.userData.isRunning && obj.waterEffect) {
+            updateSprinklerWater(obj.waterEffect)
+        }
+        
+        // Rotate fan blades when running
+        if (obj.userData.type === 'fan' && obj.userData.isRunning && obj.fanBlades) {
+            obj.fanBlades.rotation.y += 0.1; // Rotation speed
+        }
+    })
+
     renderer.render(scene, camera);
 }
+
+function updateSprinklerWater(waterGroup) {
+    if (!waterGroup.visible) return;
+
+    const positions = waterGroup.positions;
+    const velocities = waterGroup.velocities;
+    const lifetimes = waterGroup.lifetimes;
+    const particleCount = waterGroup.particleCount;
+    const maxLifetime = waterGroup.maxLifetime;
+    const deltaTime = 0.016; // ~60fps
+    const gravity = 9.8;
+
+    for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+
+        // Update lifetime
+        lifetimes[i] += deltaTime;
+        
+        if (lifetimes[i] > maxLifetime) {
+            // Reset particle completely
+            lifetimes[i] = 0;
+            positions[i3] = (Math.random() - 0.5) * 0.5;
+            positions[i3 + 1] = 0;
+            positions[i3 + 2] = (Math.random() - 0.5) * 0.5;
+
+            // Reset velocity to new spray direction
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 2 + Math.random() * 3;
+            velocities[i3] = Math.cos(angle) * speed;
+            velocities[i3 + 1] = 1 + Math.random() * 2;
+            velocities[i3 + 2] = Math.sin(angle) * speed;
+        } else {
+            // Update position
+            positions[i3] += velocities[i3] * deltaTime;
+            positions[i3 + 1] += velocities[i3 + 1] * deltaTime;
+            positions[i3 + 2] += velocities[i3 + 2] * deltaTime;
+
+            // Apply gravity
+            velocities[i3 + 1] -= gravity * deltaTime;
+        }
+    }
+
+    waterGroup.particles.geometry.attributes.position.needsUpdate = true;
+}
+
 
 // Window resize handler
 function onWindowResize() {

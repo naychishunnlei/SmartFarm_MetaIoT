@@ -38,9 +38,49 @@ export function setupEventListeners(context) {
                 x: obj.position.x,
                 y: obj.position.y,
                 z: obj.position.z
-            }
+            },
+            isRunning: obj.userData.isRunning || false  
+
         }));
         localStorage.setItem('farmObjects', JSON.stringify(saveData));
+    }
+
+    // Toggle handler function
+    function handleToggleClick() {
+        if (contextMenuTarget) {
+            const objectType = contextMenuTarget.userData.type;
+            const toggleableTypes = ['sprinkler', 'waterPump', 'fan'];
+            
+            if (toggleableTypes.includes(objectType)) {
+                // Toggle running state
+                contextMenuTarget.userData.isRunning = !contextMenuTarget.userData.isRunning;
+                
+                // Show/hide water effect for sprinkler
+                if (objectType === 'sprinkler' && contextMenuTarget.waterEffect) {
+                    contextMenuTarget.waterEffect.visible = contextMenuTarget.userData.isRunning;
+                    
+                    // Reset water particles when turning off
+                    if (!contextMenuTarget.userData.isRunning) {
+                        const waterEffect = contextMenuTarget.waterEffect;
+                        const lifetimes = waterEffect.lifetimes;
+                        for (let i = 0; i < lifetimes.length; i++) {
+                            lifetimes[i] = waterEffect.maxLifetime + 1;
+                        }
+                    }
+                }
+                
+                // Save state
+                saveObjects();
+                
+                // Close menu and reopen to refresh UI
+                hideContextMenu();
+                showContextMenu(
+                    document.getElementById('context-menu').style.left,
+                    document.getElementById('context-menu').style.top,
+                    contextMenuTarget
+                );
+            }
+        }
     }
 
     function selectObject(type) {
@@ -94,12 +134,39 @@ export function setupEventListeners(context) {
         if (!contextMenu) return;
 
         const objectName = targetObject.userData.name || targetObject.userData.type;
-        const objectEmoji = targetObject.userData.emoji || '📦';
+        const objectType = targetObject.userData.type;
 
-        const nameElement = document.getElementById('context-object-name');
-        const emojiElement = document.getElementById('context-object-emoji');
+        const nameElement = document.getElementById('context-object-name')
+        const statusElement = document.getElementById('context-status-value')
+        const toggleBtn = document.getElementById('context-toggle-btn')
+
         if (nameElement) nameElement.textContent = objectName;
-        if (emojiElement) emojiElement.textContent = objectEmoji;
+
+        if (toggleBtn) {
+            const toggleableTypes = ['sprinkler', 'waterPump', 'fan']
+            if (toggleableTypes.includes(objectType)) {
+                toggleBtn.style.display = 'block'
+                const isRunning = targetObject.userData.isRunning || false
+                toggleBtn.textContent = isRunning ? 'Turn Off' : 'Turn On'
+                toggleBtn.classList.toggle('active', isRunning)
+
+                if (statusElement) {
+                    statusElement.textContent = isRunning ? 'Running' : 'Off'
+                    statusElement.style.color = isRunning ? '#4caf50' : '#999'
+                }
+
+                // Remove old listeners and add fresh one
+                toggleBtn.onclick = null;
+                toggleBtn.removeEventListener('click', handleToggleClick);
+                toggleBtn.addEventListener('click', handleToggleClick);
+            } else {
+                toggleBtn.style.display = 'none'
+                if (statusElement) {
+                    statusElement.textContent = 'In Farm'
+                    statusElement.style.color = '#666';
+                }
+            }
+        }
 
         contextMenu.style.left = `${x}px`;
         contextMenu.style.top = `${y}px`;
@@ -163,6 +230,24 @@ export function setupEventListeners(context) {
                 if (Math.abs(point.x) < 40 && Math.abs(point.z) < 40) {
                     addObject(selectedObjectType, point);
                 }
+            }
+        } else {
+            // Show context menu when clicking on objects (no item selected)
+            const objectMeshes = [];
+            objects.forEach(obj => {
+                obj.traverse(child => {
+                    if (child.isMesh) objectMeshes.push(child);
+                });
+            });
+
+            const intersects = raycaster.intersectObjects(objectMeshes);
+            if (intersects.length > 0) {
+                const clickedObject = findParentGroup(intersects[0].object);
+                if (clickedObject) {
+                    showContextMenu(event.clientX, event.clientY, clickedObject);
+                }
+            } else {
+                hideContextMenu();
             }
         }
     }
@@ -292,18 +377,7 @@ export function setupEventListeners(context) {
     });
 }
 
-// Export save/load functions for farm-core.js
-export function saveObjects(objects) {
-    const saveData = objects.map(obj => ({
-        type: obj.userData.type,
-        position: {
-            x: obj.position.x,
-            y: obj.position.y,
-            z: obj.position.z
-        }
-    }));
-    localStorage.setItem('farmObjects', JSON.stringify(saveData));
-}
+
 
 export function loadObjects(scene, objects, createObject) {
     const savedData = localStorage.getItem('farmObjects');
@@ -313,6 +387,18 @@ export function loadObjects(scene, objects, createObject) {
             data.forEach(item => {
                 const position = new THREE.Vector3(item.position.x, item.position.y, item.position.z);
                 const obj = createObject(item.type, position);
+
+                if (item.isRunning) {
+                    obj.userData.isRunning = true;
+                    
+                    if (obj.userData.type === 'sprinkler' && obj.waterEffect) {
+                        obj.waterEffect.visible = true;
+                    }
+                    
+                    if (obj.userData.type === 'fan' && obj.fanBlades) {
+                        // Fan will start rotating automatically in animate loop
+                    }
+                }
                 scene.add(obj);
                 objects.push(obj);
             });

@@ -1,5 +1,3 @@
-// All object creation functions
-
 import * as THREE from 'three';
 export function createObject(type, position) {
     const group = new THREE.Group();
@@ -25,7 +23,7 @@ export function createObject(type, position) {
         case 'humiditySensor': createHumiditySensor(group); break;
         case 'waterPump': createWaterPump(group); break;
         case 'sprinkler': createSprinkler(group); break;
-        case 'esp32': createESP32(group); break;
+        case 'fan': createFan(group); break;
         // Animals
         case 'chicken': createChicken(group); break;
         case 'cow': createCow(group); break;
@@ -573,6 +571,70 @@ function createSprinkler(group) {
         spray.rotation.y = angle;
         group.add(spray);
     }
+
+    const waterEffect = createSprinklerWater(new THREE.Vector3(0, 0.32, 0))
+    waterEffect.visible = false
+    group.add(waterEffect)
+    group.waterEffect = waterEffect
+    group.userData.isRunning = false
+}
+
+//water particles for sprinkling
+function createSprinklerWater(position) {
+    const waterGroup = new THREE.Group()
+    waterGroup.position.copy(position)
+    waterGroup.userData.type = 'sprinkler-water'
+    waterGroup.userData.isActive = false
+
+    const particleCount = 200
+    const positions = new Float32Array(particleCount * 3)
+    const velocities = new Float32Array(particleCount * 3)
+    const lifetimes = new Float32Array(particleCount)
+    const maxLifetime = 2 
+
+    for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3
+
+        //random position
+        positions[i3] = (Math.random() - 0.5) * 0.5
+        positions[i3+1] = 0
+        positions[i3+2] = (Math.random() - 0.5) * 0.5
+
+        //random velocities
+        const angle = Math.random() * Math.PI * 2
+        const speed = 2 + Math.random() * 3
+        velocities[i3] = Math.cos(angle) * speed
+        velocities[i3 + 1] = 1 + Math.random() * 2 // upward
+        velocities[i3 + 2] = Math.sin(angle) * speed
+
+        lifetimes[i] = 0
+
+    }
+
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3))
+
+    const material = new THREE.PointsMaterial({
+        color: 0x4a9eff,
+        size: 0.08,
+        transparent: true,
+        opacity: 0.8,
+        sizeAttenuation: true
+    })
+
+    const particles = new THREE.Points(geometry, material)
+    waterGroup.add(particles)
+
+    waterGroup.particles = particles
+    waterGroup.velocities = velocities
+    waterGroup.positions = positions
+    waterGroup.lifetimes = lifetimes
+    waterGroup.particleCount = particleCount
+    waterGroup.maxLifetime = maxLifetime
+
+    return waterGroup
+
 }
 
 function createESP32(group) {
@@ -622,6 +684,46 @@ function createESP32(group) {
         led.position.set(0.05, 0.27, -0.04 + i * 0.03);
         group.add(led);
     });
+}
+
+function createFan(group) {
+    const canopyMaterial = new THREE.MeshStandardMaterial({ color: 0xd4a574 });
+    const motorMaterial = new THREE.MeshStandardMaterial({ color: 0x8b7355 });
+    const bladeMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x696969 });
+
+    // Fan pole
+    const fanPoleGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1, 8);
+    const fanPole = new THREE.Mesh(fanPoleGeometry, poleMaterial);
+    fanPole.position.y = 1.5;
+    fanPole.castShadow = true;
+    group.add(fanPole);
+
+    // Fan motor housing
+    const motorGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.4, 8);
+    const motor = new THREE.Mesh(motorGeometry, motorMaterial);
+    motor.position.y = 1.0;
+    motor.castShadow = true;
+    group.add(motor);
+
+    // Fan blades group (rotatable)
+    const fanGroup = new THREE.Group();
+    fanGroup.position.y = 0.95;
+    fanGroup.name = 'bladeGroup';
+    fanGroup.userData.isRotating = false;
+
+    // Create 3 fan blades
+    for (let i = 0; i < 3; i++) {
+        const bladeGeometry = new THREE.BoxGeometry(2, 0.05, 0.4);
+        const blade = new THREE.Mesh(bladeGeometry, bladeMaterial);
+        blade.rotation.y = (i / 3) * Math.PI * 2;
+        blade.castShadow = true;
+        fanGroup.add(blade);
+    }
+    
+    group.add(fanGroup);
+    group.fanBlades = fanGroup;
+    group.userData.isRunning = false;
 }
 
 // ==================== ANIMALS ====================
@@ -910,7 +1012,7 @@ function createTree(group) {
 }
 
 function createBush(group) {
-    const bushMaterial = new THREE.MeshStandardMaterial({ color: 0x002d04 });
+    const bushMaterial = new THREE.MeshStandardMaterial({ color: 0x266f20 });
     
     // Multiple spheres for organic shape
     const positions = [
