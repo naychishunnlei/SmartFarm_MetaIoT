@@ -329,7 +329,7 @@ canvas {
 /* Category Tabs */
 .category-tabs {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     gap: 6px;
     margin-bottom: 12px;
     padding-bottom: 12px;
@@ -729,24 +729,32 @@ canvas {
 }
 
 .context-menu-actions {
+    display: flex;
+    gap: 6px;
     padding: 8px 12px 12px;
     border-top: 1px solid rgba(180,160,130,0.2);
 }
 
 .context-btn {
-    width: 100%;
-    padding: 10px 14px;
+    flex: 1;
+    padding: 10px;
     border: none;
     border-radius: 10px;
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 500;
     font-family: inherit;
+    background: rgba(74, 158, 255, 0.15);
     transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
+}
+
+.context-btn[style*="display: none"] ~ .context-btn.danger {
+    flex: 1;
+    width: 100%;
 }
 
 .context-btn.danger {
@@ -756,6 +764,30 @@ canvas {
 
 .context-btn.danger:hover {
     background: rgba(180, 90, 70, 0.3);
+}
+
+.context-btn:hover {
+    background: rgba(74, 158, 255, 0.3);
+    transform: translateY(-2px);
+}
+
+.context-btn.active {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4caf50;
+}
+
+.context-btn.danger {
+    background: rgba(244, 67, 54, 0.15);
+    color: #f44336;
+}
+
+.context-btn.danger:hover {
+    background: rgba(244, 67, 54, 0.3);
+}
+
+#context-status-value {
+    font-weight: 600;
+    transition: color 0.3s ease;
 }
 
 /* Responsive */
