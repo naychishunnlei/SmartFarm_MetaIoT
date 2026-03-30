@@ -11,6 +11,31 @@ body {
     background: #2c3e2d;
 }
 
+/* Back Button */
+.back-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    margin-right: 1rem;
+    transition: all 0.3s ease;
+}
+
+.back-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+}
+
+.selected-farm-name {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+    font-weight: 400;
+}
+
 /* Map Page Styles */
 .container {
     max-width: 1200px;

@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+// THREE is loaded globally
 
 export function setupEventListeners(context) {
     const { renderer, camera, scene, ground, objectsRef, createObject } = context;

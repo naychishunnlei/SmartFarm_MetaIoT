@@ -1,7 +1,6 @@
 // Smart Farm - Core Module
 // Main initialization, scene setup, and event handling
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+// THREE, OrbitControls, and GLTFLoader are loaded globally
 import { setupEventListeners, loadObjects } from './utils.js';
 import { createObject } from './objects.js';
 
@@ -97,7 +96,7 @@ export async function init() {
     );
 
     // Add orbit controls
-    controls = new OrbitControls(camera, renderer.domElement);
+    controls = new window.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.maxPolarAngle = Math.PI / 2.2;

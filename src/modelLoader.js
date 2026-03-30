@@ -1,6 +1,6 @@
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+// GLTFLoader is loaded globally
 
-const loader = new GLTFLoader();
+const loader = new window.GLTFLoader();
 const modelCache = {};
 
 export function loadModel(path) {

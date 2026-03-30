@@ -1,7 +1,7 @@
-import { OrbitControls } from "three/examples/jsm/Addons.js";
+// OrbitControls is loaded globally
 
 export function setUpControls(camera, domElement) {
-    const controls = new OrbitControls(camera, domElement)
+    const controls = new window.OrbitControls(camera, domElement)
 
     //configure controls
     controls.enableDamping = true

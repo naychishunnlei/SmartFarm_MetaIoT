@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+// THREE is loaded globally
 
 export function createAvatar(scene) {
   const avatarGroup = new THREE.Group();
