@@ -6,6 +6,12 @@
     <title>Smart Farm System - Thailand Map</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""
+    >
     <style>
         body {
             margin: 0;
@@ -40,72 +46,39 @@
             align-items: center;
             justify-content: center;
             padding: 2rem;
+            gap: 1rem;
         }
 
         .map-title {
             color: white;
             font-size: 2.5rem;
-            margin-bottom: 2rem;
+            margin: 0;
             text-align: center;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
         }
 
-        .thailand-map {
-            width: 80%;
-            max-width: 800px;
-            height: auto;
-            position: relative;
+        #map {
+            width: min(90vw, 980px);
+            height: min(68vh, 680px);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.35);
         }
 
-        .farm-location {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            background: #ff6b6b;
-            border: 3px solid white;
-            border-radius: 50%;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        .map-status {
+            color: #ffffff;
+            font-size: 0.95rem;
+            text-align: center;
+            min-height: 1.4rem;
         }
 
-        .farm-location:hover {
-            transform: scale(1.2);
-            background: #ff5252;
+        .map-status.error {
+            color: #ffd1d1;
         }
 
-        .farm-location::after {
-            content: '';
-            position: absolute;
-            top: -8px;
-            left: -8px;
-            width: 36px;
-            height: 36px;
-            border: 2px solid rgba(255, 255, 255, 0.5);
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 1; }
-            100% { transform: scale(1.5); opacity: 0; }
-        }
-
-        .farm-tooltip {
-            position: absolute;
-            background: white;
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            font-size: 0.9rem;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            z-index: 1000;
-        }
-
-        .farm-tooltip.show {
-            opacity: 1;
+        .leaflet-popup-content {
+            font-family: 'Poppins', sans-serif;
         }
 
         .footer {
@@ -122,70 +95,162 @@
             <h1>Farmverse</h1>
         </div>
         <div class="nav">
-            <span style="color: white;">Thailand Farm Locations</span>
+            <span style="color: white;">Thailand Farm Locations (API)</span>
         </div>
     </div>
 
     <div class="map-container">
         <h1 class="map-title">Select Your Farm Location</h1>
-
-        <div class="thailand-map">
-            <!-- Simple Thailand map outline -->
-            <svg viewBox="0 0 400 600" xmlns="http://www.w3.org/2000/svg">
-                <!-- Thailand outline (simplified) -->
-                <path d="M200 50 L180 60 L160 70 L140 80 L130 100 L120 120 L110 140 L100 160 L90 180 L80 200 L70 220 L60 240 L50 260 L40 280 L30 300 L20 320 L10 340 L5 360 L10 380 L20 400 L30 420 L40 440 L50 460 L60 480 L70 500 L80 520 L90 540 L100 560 L120 570 L140 575 L160 580 L180 585 L200 590 L220 585 L240 580 L260 575 L280 570 L300 560 L320 540 L330 520 L340 500 L350 480 L360 460 L370 440 L380 420 L385 400 L390 380 L385 360 L380 340 L370 320 L360 300 L350 280 L340 260 L330 240 L320 220 L310 200 L300 180 L290 160 L280 140 L270 120 L260 100 L250 80 L240 70 L220 60 Z"
-                      fill="#2d5a27" stroke="#1a3d1a" stroke-width="2"/>
-
-                <!-- Rivers (simplified) -->
-                <path d="M150 100 L160 120 L170 140 L180 160 L190 180 L200 200 L210 220 L220 240 L230 260 L240 280 L250 300 L260 320 L270 340 L280 360 L290 380 L300 400 L310 420 L320 440 L330 460 L340 480"
-                      fill="none" stroke="#4a90e2" stroke-width="3" opacity="0.7"/>
-            </svg>
-
-            <!-- Farm locations -->
-            <div class="farm-location" style="top: 20%; left: 25%;" data-farm="Bangkok Farm" data-desc="Central region smart farm"></div>
-            <div class="farm-location" style="top: 35%; left: 40%;" data-farm="Chiang Mai Farm" data-desc="Northern mountain farm"></div>
-            <div class="farm-location" style="top: 50%; left: 60%;" data-farm="Phuket Farm" data-desc="Southern island farm"></div>
-            <div class="farm-location" style="top: 65%; left: 30%;" data-farm="Khon Kaen Farm" data-desc="Northeast rice farm"></div>
-            <div class="farm-location" style="top: 45%; left: 20%;" data-farm="Ayutthaya Farm" data-desc="Historical region farm"></div>
-        </div>
+        <div id="map" aria-label="Thailand farm map"></div>
+        <div id="map-status" class="map-status">Loading real farm coordinates from API...</div>
     </div>
 
     <div class="footer">
         <p>🌾 Smart Farm MetaIoT System - Choose your location to begin farming in the metaverse</p>
     </div>
 
-    <div class="farm-tooltip" id="farm-tooltip"></div>
-
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""
+    ></script>
     <script>
-        const farmLocations = document.querySelectorAll('.farm-location');
-        const tooltip = document.getElementById('farm-tooltip');
+        const THAILAND_BOUNDS = [
+            [5.5, 97.2],
+            [20.7, 106.2]
+        ];
 
-        farmLocations.forEach(location => {
-            location.addEventListener('mouseenter', (e) => {
-                const farmName = e.target.dataset.farm;
-                const desc = e.target.dataset.desc;
+        const FARM_SEEDS = [
+            { label: 'Bangkok Farm', query: 'Bangkok, Thailand', desc: 'Central region smart farm' },
+            { label: 'Chiang Mai Farm', query: 'Chiang Mai, Thailand', desc: 'Northern mountain farm' },
+            { label: 'Phuket Farm', query: 'Phuket, Thailand', desc: 'Southern island farm' },
+            { label: 'Khon Kaen Farm', query: 'Khon Kaen, Thailand', desc: 'Northeast rice farm' },
+            { label: 'Ayutthaya Farm', query: 'Ayutthaya, Thailand', desc: 'Historical region farm' }
+        ];
 
-                tooltip.innerHTML = `<strong>${farmName}</strong><br>${desc}`;
-                tooltip.classList.add('show');
+        const FALLBACK_COORDS = {
+            'Bangkok Farm': { lat: 13.7563, lon: 100.5018 },
+            'Chiang Mai Farm': { lat: 18.7883, lon: 98.9853 },
+            'Phuket Farm': { lat: 7.8804, lon: 98.3923 },
+            'Khon Kaen Farm': { lat: 16.4419, lon: 102.8350 },
+            'Ayutthaya Farm': { lat: 14.3532, lon: 100.5689 }
+        };
 
-                const rect = e.target.getBoundingClientRect();
-                tooltip.style.left = rect.left + rect.width / 2 + 'px';
-                tooltip.style.top = rect.top - 40 + 'px';
+        const mapStatus = document.getElementById('map-status');
+        const map = L.map('map', {
+            minZoom: 5,
+            maxZoom: 12
+        });
+
+        map.fitBounds(THAILAND_BOUNDS);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        L.rectangle(THAILAND_BOUNDS, {
+            color: '#5cd65c',
+            weight: 1,
+            fillOpacity: 0.05
+        }).addTo(map);
+
+        function setStatus(message, isError = false) {
+            mapStatus.textContent = message;
+            mapStatus.classList.toggle('error', isError);
+        }
+
+        async function geocodeFarm(seed) {
+            const url = new URL('https://nominatim.openstreetmap.org/search');
+            url.searchParams.set('q', seed.query);
+            url.searchParams.set('format', 'jsonv2');
+            url.searchParams.set('limit', '1');
+            url.searchParams.set('countrycodes', 'th');
+
+            const response = await fetch(url.toString(), {
+                headers: {
+                    Accept: 'application/json'
+                }
             });
 
-            location.addEventListener('mouseleave', () => {
-                tooltip.classList.remove('show');
-            });
+            if (!response.ok) {
+                throw new Error(`Geocode failed with status ${response.status}`);
+            }
 
-            location.addEventListener('click', (e) => {
-                const farmName = e.target.dataset.farm;
-                // Store selected farm in localStorage
-                localStorage.setItem('selectedFarm', farmName);
-                // Navigate directly to the farm page
-                window.location.href = 'farm.html';
+            const results = await response.json();
+            if (!results.length) {
+                throw new Error(`No result for ${seed.query}`);
+            }
+
+            return {
+                ...seed,
+                lat: Number(results[0].lat),
+                lon: Number(results[0].lon)
+            };
+        }
+
+        function buildFarmRecord(seed, coords) {
+            return {
+                name: seed.label,
+                desc: seed.desc,
+                lat: coords.lat,
+                lon: coords.lon
+            };
+        }
+
+        function addFarmMarker(farm, sourceLabel) {
+            const marker = L.marker([farm.lat, farm.lon]).addTo(map);
+            marker.bindPopup(`
+                <strong>${farm.name}</strong><br>
+                ${farm.desc}<br>
+                <small>Lat: ${farm.lat.toFixed(4)}, Lon: ${farm.lon.toFixed(4)} (${sourceLabel})</small><br><br>
+                <button type="button" data-select-farm="${farm.name}">Select this farm</button>
+            `);
+
+            marker.on('popupopen', () => {
+                const button = document.querySelector(`button[data-select-farm="${farm.name}"]`);
+                if (!button) return;
+                button.addEventListener('click', () => {
+                    localStorage.setItem('selectedFarm', farm.name);
+                    localStorage.setItem('selectedFarmGeo', JSON.stringify(farm));
+                    window.location.href = 'farm.html';
+                });
             });
+        }
+
+        async function loadRealFarmMarkers() {
+            const farms = [];
+            for (const seed of FARM_SEEDS) {
+                try {
+                    const resolved = await geocodeFarm(seed);
+                    const farm = buildFarmRecord(seed, { lat: resolved.lat, lon: resolved.lon });
+                    farms.push({ farm, source: 'API' });
+                    await new Promise((resolve) => setTimeout(resolve, 1100));
+                } catch (error) {
+                    const fallback = FALLBACK_COORDS[seed.label];
+                    if (fallback) {
+                        farms.push({ farm: buildFarmRecord(seed, fallback), source: 'fallback' });
+                    }
+                }
+            }
+
+            if (!farms.length) {
+                setStatus('Unable to load farm locations.', true);
+                return;
+            }
+
+            farms.forEach(({ farm, source }) => addFarmMarker(farm, source));
+
+            const allApi = farms.every((item) => item.source === 'API');
+            if (allApi) {
+                setStatus('Loaded real farm coordinates from API.');
+            } else {
+                setStatus('Loaded farm coordinates (some used fallback when API was unavailable).');
+            }
+        }
+
+        loadRealFarmMarkers().catch(() => {
+            setStatus('Unexpected error while loading farm locations.', true);
         });
     </script>
 </body>
-</html></content>
-<parameter name="filePath">/Users/aunstotheaing/Documents/GitHub/SmartFarm_MetaIoT/index.html
+</html>
