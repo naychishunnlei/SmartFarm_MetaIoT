@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+// THREE is loaded globally
 import { loadModel } from './modelLoader.js';
 
 // Store loaded models

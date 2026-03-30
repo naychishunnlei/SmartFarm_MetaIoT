@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Farm System - Virtual Farm</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="farm-container">
+        <!-- Three.js canvas will be inserted here -->
+        
+        <!-- UI Overlay -->
+        <div class="farm-ui">
+            <!-- Top Navigation Bar -->
+            <div class="top-bar">
+                <div class="logo">
+                    <button class="back-btn" onclick="window.location.href='index.html'" title="Back to Map">
+                        ← Map
+                    </button>
+                    <!-- <span class="logo-icon">🌾</span> -->
+                    <h1>Farmverse</h1>
+                    <div id="selected-farm-name" class="selected-farm-name">Default Farm</div>
+                </div>
+                <div class="weather-widget">
+                    <span class="weather-icon">☀️</span>
+                    <div class="weather-info">
+                        <span class="temp">28°C</span>
+                        <span class="condition">Sunny</span>
+                    </div>
+                </div>
+                <div class="farm-stats">
+                    <div class="stat-item">
+                        <span class="stat-icon">📦</span>
+                        <span id="object-count">0</span>
+                        <span class="stat-label">Objects</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-icon">💧</span>
+                        <span>72%</span>
+                        <span class="stat-label">Humidity</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Items Button & Dropdown -->
+            <div class="add-items-container">
+                <button id="add-items-btn" class="add-items-btn">
+                    <span class="add-icon">➕</span>
+                    <span>Add Items</span>
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                
+                <div class="add-items-dropdown" id="add-items-dropdown">
+                    <!-- Category Tabs -->
+                    <div class="category-tabs">
+                        <button class="category-tab active" data-category="crops">🌱</button>
+                        <button class="category-tab" data-category="infrastructure">🏗️</button>
+                        <button class="category-tab" data-category="iot">📡</button>
+                        <button class="category-tab" data-category="animals">🐄</button>
+                        <button class="category-tab" data-category="environment">🌳</button>
+                    </div>
+
+                    <!-- Crops Category -->
+                    <div class="category-content active" id="crops-category">
+                        <div class="category-title">🌱 Crops & Plants</div>
+                        <div class="object-options">
+                            <button class="object-btn" data-object="tomato">
+                                <span class="object-emoji">🍅</span>
+                                <span class="object-name">Tomato</span>
+                            </button>
+                            <button class="object-btn" data-object="carrot">
+                                <span class="object-emoji">🥕</span>
+                                <span class="object-name">Carrot</span>
+                            </button>
+                            <button class="object-btn" data-object="corn">
+                                <span class="object-emoji">🌽</span>
+                                <span class="object-name">Corn</span>
+                            </button>
+                            <button class="object-btn" data-object="wheat">
+                                <span class="object-emoji">🌾</span>
+                                <span class="object-name">Wheat</span>
+                            </button>
+                            <button class="object-btn" data-object="sunflower">
+                                <span class="object-emoji">🌻</span>
+                                <span class="object-name">Sunflower</span>
+                            </button>
+                            <button class="object-btn" data-object="cabbage">
+                                <span class="object-emoji">🥬</span>
+                                <span class="object-name">Cabbage</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Infrastructure Category -->
+                    <div class="category-content" id="infrastructure-category">
+                        <div class="category-title">Infrastructure</div>
+                        <div class="object-options">
+                            <button class="object-btn" data-object="soilBed">
+                                <span class="object-emoji">🟫</span>
+                                <span class="object-name">Soil Bed</span>
+                            </button>
+                            <button class="object-btn" data-object="plantPot">
+                                <span class="object-emoji">🪴</span>
+                                <span class="object-name">Plant Pot</span>
+                            </button>
+                            <button class="object-btn" data-object="greenhouse">
+                                <span class="object-emoji">🏠</span>
+                                <span class="object-name">Greenhouse</span>
+                            </button>
+                            <button class="object-btn" data-object="waterTank">
+                                <span class="object-emoji">🛢️</span>
+                                <span class="object-name">Water Tank</span>
+                            </button>
+                            <button class="object-btn" data-object="irrigationPipe">
+                                <span class="object-emoji">🔧</span>
+                                <span class="object-name">Pipe</span>
+                            </button>
+                            <button class="object-btn" data-object="solarPanel">
+                                <span class="object-emoji">☀️</span>
+                                <span class="object-name">Solar Panel</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- IoT Devices Category -->
+                    <div class="category-content" id="iot-category">
+                        <div class="category-title">Devices & Sensors</div>
+                        <div class="object-options">
+                            <button class="object-btn" data-object="moistureSensor">
+                                <span class="object-emoji">💧</span>
+                                <span class="object-name">Moisture</span>
+                            </button>
+                            <button class="object-btn" data-object="tempSensor">
+                                <span class="object-emoji">🌡️</span>
+                                <span class="object-name">Temp Sensor</span>
+                            </button>
+                            <button class="object-btn" data-object="humiditySensor">
+                                <span class="object-emoji">💦</span>
+                                <span class="object-name">Humidity</span>
+                            </button>
+                            <button class="object-btn" data-object="waterPump">
+                                <span class="object-emoji">⛽</span>
+                                <span class="object-name">Water Pump</span>
+                            </button>
+                            <button class="object-btn" data-object="sprinkler">
+                                <span class="object-emoji">🚿</span>
+                                <span class="object-name">Sprinkler</span>
+                            </button>
+                            <button class="object-btn" data-object="fan">
+                                <span class="object-emoji">🌀</span>
+                                <span class="object-name">Fan</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Animals Category -->
+                    <div class="category-content" id="animals-category">
+                        <div class="category-title">Farm Animals</div>
+                        <div class="object-options">
+                            <button class="object-btn" data-object="chicken">
+                                <span class="object-emoji">🐔</span>
+                                <span class="object-name">Chicken</span>
+                            </button>
+                            <button class="object-btn" data-object="cow">
+                                <span class="object-emoji">🐄</span>
+                                <span class="object-name">Cow</span>
+                            </button>
+                            <button class="object-btn" data-object="pig">
+                                <span class="object-emoji">🐷</span>
+                                <span class="object-name">Pig</span>
+                            </button>
+                            <button class="object-btn" data-object="sheep">
+                                <span class="object-emoji">🐑</span>
+                                <span class="object-name">Sheep</span>
+                            </button>
+                            <button class="object-btn" data-object="duck">
+                                <span class="object-emoji">🦆</span>
+                                <span class="object-name">Duck</span>
+                            </button>
+                            <button class="object-btn" data-object="horse">
+                                <span class="object-emoji">🐴</span>
+                                <span class="object-name">Horse</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Environment Category -->
+                    <div class="category-content" id="environment-category">
+                        <div class="category-title">Environment</div>
+                        <div class="object-options">
+                            <button class="object-btn" data-object="tree">
+                                <span class="object-emoji">🌳</span>
+                                <span class="object-name">Tree</span>
+                            </button>
+                            <button class="object-btn" data-object="bush">
+                                <span class="object-emoji">🌿</span>
+                                <span class="object-name">Bush</span>
+                            </button>
+                            <button class="object-btn" data-object="storageHouse">
+                                <span class="object-emoji">🏚️</span>
+                                <span class="object-name">Storage</span>
+                            </button>
+                            <button class="object-btn" data-object="fence">
+                                <span class="object-emoji">🚧</span>
+                                <span class="object-name">Fence</span>
+                            </button>
+                            <button class="object-btn" data-object="rock">
+                                <span class="object-emoji">🪨</span>
+                                <span class="object-name">Rock</span>
+                            </button>
+                            <button class="object-btn" data-object="path">
+                                <span class="object-emoji">🛤️</span>
+                                <span class="object-name">Path</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="panel-divider"></div>
+                    <div class="panel-actions">
+                        <button id="delete-mode-btn" class="action-btn">
+                            Delete Mode
+                        </button>
+                        <button id="clear-all-btn" class="action-btn danger">
+                            Clear All
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Context Menu (right-click popup) -->
+            <div id="context-menu" class="context-menu">
+                <div class="context-menu-header">
+                    <span id="context-object-emoji"></span>
+                    <span id="context-object-name">Object</span>
+                </div>
+                <div class="context-menu-body">
+                    <div class="context-status">
+                        <span class="status-label">Status:</span>
+                        <!-- need to change according to obj's state -->
+                        <span class="status-value" id="context-status-value">Active</span>
+                    </div>
+                </div>
+                <div class="context-menu-actions">
+                    <button id="context-toggle-btn" class="context-btn" style="display: none;">Turn On</button>
+                    <button id="context-delete-btn" class="context-btn danger">
+                        Delete
+                    </button>
+                </div>
+            </div>
+
+            <!-- Bottom Instructions -->
+            <div class="instructions">
+                <div class="instruction-item">
+                    <span class="key">Click</span>
+                    <span>Place item</span>
+                </div>
+                <div class="instruction-item">
+                    <span class="key">Drag</span>
+                    <span>Rotate view</span>
+                </div>
+                <div class="instruction-item">
+                    <span class="key">Scroll</span>
+                    <span>Zoom</span>
+                </div>
+                <div class="instruction-item">
+                    <span class="key">Right-click</span>
+                    <span>Object menu</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Screen -->
+        <div id="loading-screen">
+            <div class="loader-content">
+                <div class="loader-icon">🌱</div>
+                <div class="loader-spinner"></div>
+                <p>Loading Virtual Farm...</p>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Load selected farm name from localStorage
+        const selectedFarm = localStorage.getItem('selectedFarm') || 'Default Farm';
+        document.getElementById('selected-farm-name').textContent = selectedFarm;
+    </script>
+    <script type="module">
+        // Load Three.js from esm.sh (ES module CDN)
+        import * as THREE from 'https://esm.sh/three@0.182.0';
+        window.THREE = THREE;
+
+        // Load controls and loaders
+        import { OrbitControls } from 'https://esm.sh/three@0.182.0/examples/jsm/controls/OrbitControls.js';
+        import { GLTFLoader } from 'https://esm.sh/three@0.182.0/examples/jsm/loaders/GLTFLoader.js';
+
+        window.OrbitControls = OrbitControls;
+        window.GLTFLoader = GLTFLoader;
+    </script>
+    <script type="module" src="/src/main.js"></script>
+
+</body>
+</html>
