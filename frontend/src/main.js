@@ -1,5 +1,4 @@
 import { init } from './farm-core.js';
-
 (async () => {
   try {
     // Wait for THREE to be loaded

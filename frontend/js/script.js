@@ -57,38 +57,53 @@ window.addEventListener('click', (event) => {
     }
 });
 
+// --- API Integration ---
+const API_BASE_URL = 'http://localhost:5001/api'; // Ensure this port matches your backend
+
 // Handle Login Form Submission
-loginForm.addEventListener('submit', (e) => {
+loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
     
-    // Validate inputs
     if (!email || !password) {
         alert('Please fill in all fields');
         return;
     }
     
-    // Here you would typically send data to backend
-    console.log('Login attempt:', { email, password });
+    try {
+        const response = await fetch(`${API_BASE_URL}/users/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.message || 'Login failed.');
+        }
+        
+        // On successful login, save the token and user info
+        localStorage.setItem('farmverseToken', result.token);
+        localStorage.setItem('farmverseUser', JSON.stringify(result.user));
+        
+        alert('Login successful! Redirecting...');
+        
+        // Redirect to the map page
+        window.location.href = 'map.html';
+        
+    } catch (error) {
+        // Show the specific error message from the backend
+        alert(`Login failed: ${error.message}`);
+    }
     
-    // Simulate successful login
-    alert('Login successful! Redirecting...');
-    
-    // Store user session (in real app, this would be handled by backend)
-    localStorage.setItem('userEmail', email);
-    localStorage.setItem('isLoggedIn', 'true');
-    
-    // Redirect to map page to select farm location
-    window.location.href = 'map.html';
-    
-    // Reset form
     loginForm.reset();
 });
 
 // Handle Register Form Submission
-registerForm.addEventListener('submit', (e) => {
+registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const name = document.getElementById('register-name').value;
@@ -97,43 +112,48 @@ registerForm.addEventListener('submit', (e) => {
     const confirmPassword = document.getElementById('register-confirm').value;
     const agreeTerms = document.querySelector('.checkbox input[type="checkbox"]').checked;
     
-    // Validate inputs
+    // --- Client-side validation ---
     if (!name || !email || !password || !confirmPassword) {
         alert('Please fill in all fields');
         return;
     }
-    
-    // Validate password match
     if (password !== confirmPassword) {
         alert('Passwords do not match');
         return;
     }
-    
-    // Validate password strength
     if (password.length < 6) {
         alert('Password must be at least 6 characters long');
         return;
     }
-    
-    // Validate terms agreement
     if (!agreeTerms) {
         alert('Please agree to the Terms of Service and Privacy Policy');
         return;
     }
-    
-    // Here you would typically send data to backend
-    console.log('Registration attempt:', { name, email, password });
-    
-    // Simulate successful registration
-    alert('Account created successfully! Please log in.');
-    
-    // Store user data (in real app, this would be handled by backend)
-    localStorage.setItem('userEmail', email);
-    localStorage.setItem('userName', name);
-    
-    // Reset form and open login modal
-    registerForm.reset();
-    openLoginModal();
+    // --- End of validation ---
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/users/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, password }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.message || 'Registration failed.');
+        }
+
+        alert('Account created successfully! Please log in.');
+        
+        // Reset form and switch to the login modal for a smooth user experience
+        registerForm.reset();
+        openLoginModal();
+
+    } catch (error) {
+        // Show the specific error from the backend (e.g., "email already exists")
+        alert(`Registration failed: ${error.message}`);
+    }
 });
 
 // Smooth scroll for navigation links
@@ -141,10 +161,7 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
         const href = this.getAttribute('href');
         
-        // Skip if href is just "#" or empty
-        if (href === '#' || href === '') {
-            return;
-        }
+        if (href === '#' || href === '') return;
         
         e.preventDefault();
         const target = document.querySelector(href);
@@ -156,48 +173,36 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         }
     });
 });
+
 // Contact Form Submission
 const contactForm = document.querySelector('.contact-form');
 if (contactForm) {
     contactForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        
-        const inputs = contactForm.querySelectorAll('input, textarea');
-        const formData = {};
-        
-        inputs.forEach(input => {
-            if (input.name) {
-                formData[input.name] = input.value;
-            }
-        });
-        
-        // Simulate form submission
-        console.log('Contact form submitted:', formData);
+        console.log('Contact form submitted.');
         alert('Thank you for your message! We will get back to you soon.');
-        
-        // Reset form
         contactForm.reset();
     });
 }
 
 // Check if user is logged in on page load
 window.addEventListener('load', () => {
-    const isLoggedIn = localStorage.getItem('isLoggedIn');
-    const userName = localStorage.getItem('userName');
-    
-    if (isLoggedIn === 'true' && userName) {
-        console.log('User is logged in:', userName);
-        // You could update the UI here if needed
+    const token = localStorage.getItem('farmverseToken');
+    if (token) {
+        console.log('User is logged in.');
+        // You could potentially update the UI here to show a "Logout" button instead of "Login"
     }
 });
 
 // Logout function (can be used from other pages)
 function logout() {
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('userName');
-    localStorage.removeItem('isLoggedIn');
+    // Clear the authentication token and user info
+    localStorage.removeItem('farmverseToken');
+    localStorage.removeItem('farmverseUser');
+    
+    // Redirect to the home page
     window.location.href = 'index.html';
 }
 
-// Export logout function
+// Make the logout function globally accessible
 window.logout = logout;
