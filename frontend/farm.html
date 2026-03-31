@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Farm System - Virtual Farm</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/farm.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
 </head>
 <body>
     <div id="farm-container">
@@ -16,7 +18,7 @@
             <!-- Top Navigation Bar -->
             <div class="top-bar">
                 <div class="logo">
-                    <button class="back-btn" onclick="window.location.href='index.html'" title="Back to Map">
+                    <button class="back-btn" onclick="window.location.href='map.html'" title="Back to Map">
                         ← Map
                     </button>
                     <!-- <span class="logo-icon">🌾</span> -->
@@ -297,7 +299,7 @@
         window.OrbitControls = OrbitControls;
         window.GLTFLoader = GLTFLoader;
     </script>
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="./src/main.js"></script>
 
 </body>
 </html>

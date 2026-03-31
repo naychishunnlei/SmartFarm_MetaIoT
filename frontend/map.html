@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Farm System - Thailand Map</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""
+    >
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .logo h1 {
+            color: white;
+            margin: 0;
+            font-size: 1.8rem;
+        }
+
+        .map-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            gap: 1rem;
+        }
+
+        .map-title {
+            color: white;
+            font-size: 2.5rem;
+            margin: 0;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        #map {
+            width: min(90vw, 980px);
+            height: min(68vh, 680px);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+        }
+
+        .map-status {
+            color: #ffffff;
+            font-size: 0.95rem;
+            text-align: center;
+            min-height: 1.4rem;
+        }
+
+        .map-status.error {
+            color: #ffd1d1;
+        }
+
+        .leaflet-popup-content {
+            font-family: 'Poppins', sans-serif;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 1rem;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">
+            <h1>Farmverse</h1>
+        </div>
+        <div class="nav">
+            <span style="color: white;">Thailand Farm Locations (API)</span>
+        </div>
+    </div>
+
+    <div class="map-container">
+        <h1 class="map-title">Select Your Farm Location</h1>
+        <div id="map" aria-label="Thailand farm map"></div>
+        <div id="map-status" class="map-status">Loading real farm coordinates from API...</div>
+    </div>
+
+    <div class="footer">
+        <p>🌾 Smart Farm MetaIoT System - Choose your location to begin farming in the metaverse</p>
+    </div>
+
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""
+    ></script>
+    <script>
+        const THAILAND_BOUNDS = [
+            [5.5, 97.2],
+            [20.7, 106.2]
+        ];
+
+        const FARM_SEEDS = [
+            { label: 'Bangkok Farm', query: 'Bangkok, Thailand', desc: 'Central region smart farm' },
+            { label: 'Chiang Mai Farm', query: 'Chiang Mai, Thailand', desc: 'Northern mountain farm' },
+            { label: 'Phuket Farm', query: 'Phuket, Thailand', desc: 'Southern island farm' },
+            { label: 'Khon Kaen Farm', query: 'Khon Kaen, Thailand', desc: 'Northeast rice farm' },
+            { label: 'Ayutthaya Farm', query: 'Ayutthaya, Thailand', desc: 'Historical region farm' }
+        ];
+
+        const FALLBACK_COORDS = {
+            'Bangkok Farm': { lat: 13.7563, lon: 100.5018 },
+            'Chiang Mai Farm': { lat: 18.7883, lon: 98.9853 },
+            'Phuket Farm': { lat: 7.8804, lon: 98.3923 },
+            'Khon Kaen Farm': { lat: 16.4419, lon: 102.8350 },
+            'Ayutthaya Farm': { lat: 14.3532, lon: 100.5689 }
+        };
+
+        const mapStatus = document.getElementById('map-status');
+        const map = L.map('map', {
+            minZoom: 5,
+            maxZoom: 12
+        });
+
+        map.fitBounds(THAILAND_BOUNDS);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        L.rectangle(THAILAND_BOUNDS, {
+            color: '#5cd65c',
+            weight: 1,
+            fillOpacity: 0.05
+        }).addTo(map);
+
+        function setStatus(message, isError = false) {
+            mapStatus.textContent = message;
+            mapStatus.classList.toggle('error', isError);
+        }
+
+        async function geocodeFarm(seed) {
+            const url = new URL('https://nominatim.openstreetmap.org/search');
+            url.searchParams.set('q', seed.query);
+            url.searchParams.set('format', 'jsonv2');
+            url.searchParams.set('limit', '1');
+            url.searchParams.set('countrycodes', 'th');
+
+            const response = await fetch(url.toString(), {
+                headers: {
+                    Accept: 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Geocode failed with status ${response.status}`);
+            }
+
+            const results = await response.json();
+            if (!results.length) {
+                throw new Error(`No result for ${seed.query}`);
+            }
+
+            return {
+                ...seed,
+                lat: Number(results[0].lat),
+                lon: Number(results[0].lon)
+            };
+        }
+
+        function buildFarmRecord(seed, coords) {
+            return {
+                name: seed.label,
+                desc: seed.desc,
+                lat: coords.lat,
+                lon: coords.lon
+            };
+        }
+
+        function addFarmMarker(farm, sourceLabel) {
+            const marker = L.marker([farm.lat, farm.lon]).addTo(map);
+            marker.bindPopup(`
+                <strong>${farm.name}</strong><br>
+                ${farm.desc}<br>
+                <small>Lat: ${farm.lat.toFixed(4)}, Lon: ${farm.lon.toFixed(4)} (${sourceLabel})</small><br><br>
+                <button type="button" data-select-farm="${farm.name}">Select this farm</button>
+            `);
+
+            marker.on('popupopen', () => {
+                const button = document.querySelector(`button[data-select-farm="${farm.name}"]`);
+                if (!button) return;
+                button.addEventListener('click', () => {
+                    localStorage.setItem('selectedFarm', farm.name);
+                    localStorage.setItem('selectedFarmGeo', JSON.stringify(farm));
+                    window.location.href = 'farm.html';
+                });
+            });
+        }
+
+        async function loadRealFarmMarkers() {
+            const farms = [];
+            for (const seed of FARM_SEEDS) {
+                try {
+                    const resolved = await geocodeFarm(seed);
+                    const farm = buildFarmRecord(seed, { lat: resolved.lat, lon: resolved.lon });
+                    farms.push({ farm, source: 'API' });
+                    await new Promise((resolve) => setTimeout(resolve, 1100));
+                } catch (error) {
+                    const fallback = FALLBACK_COORDS[seed.label];
+                    if (fallback) {
+                        farms.push({ farm: buildFarmRecord(seed, fallback), source: 'fallback' });
+                    }
+                }
+            }
+
+            if (!farms.length) {
+                setStatus('Unable to load farm locations.', true);
+                return;
+            }
+
+            farms.forEach(({ farm, source }) => addFarmMarker(farm, source));
+
+            const allApi = farms.every((item) => item.source === 'API');
+            if (allApi) {
+                setStatus('Loaded real farm coordinates from API.');
+            } else {
+                setStatus('Loaded farm coordinates (some used fallback when API was unavailable).');
+            }
+        }
+
+        loadRealFarmMarkers().catch(() => {
+            setStatus('Unexpected error while loading farm locations.', true);
+        });
+    </script>
+</body>
+</html>
