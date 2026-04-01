@@ -39,3 +39,13 @@ async function request(endpoint, method = 'GET', data = null) {
 export const registerUser = (userData) => request('/users/register', 'POST', userData);
 export const loginUser = (credentials) => request('/users/login', 'POST', credentials);
 export const getUserProfile = () => request('/users/profile', 'GET');
+
+export const createObject = (farmId, objectData) => request(`/farms/${farmId}/objects`, 'POST', objectData);
+export const getObjectsForFarm = (farmId) => request(`/farms/${farmId}/objects`, 'GET')
+export const deleteObject = (farmId, objectId) => request(`/farms/${farmId}/objects/${objectId}`, 'DELETE')
+
+
+export const getFarmsForUser = () => request('/farms', 'GET');
+export const getOrCreateFarm = (farmData) => request('/farms', 'POST', farmData);
+
+

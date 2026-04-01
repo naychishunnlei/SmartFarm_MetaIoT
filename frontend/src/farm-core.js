@@ -1,8 +1,9 @@
 // Smart Farm - Core Module
 // Main initialization, scene setup, and event handling
 // THREE, OrbitControls, and GLTFLoader are loaded globally
-import { setupEventListeners, loadObjects } from './utils.js';
-import { createObject } from './objects.js';
+import { setupEventListeners, addObject } from './utils.js';
+import { createObject } from './objects.js'
+import { getObjectsForFarm } from './apiService.js';
 
 // Global variables
 let scene, camera, renderer, controls;
@@ -54,6 +55,13 @@ const objectConfigs = {
 
 // Initialize the scene
 export async function init() {
+
+    const farmId = localStorage.getItem('selectedFarmId')
+    if (!farmId) {
+        alert('no farm selected. Redirecting to map')
+        window.location.href = 'map.html'
+        return
+    }
     // Create scene
     scene = new THREE.Scene();
     
@@ -114,8 +122,23 @@ export async function init() {
     // Setup lighting
     setupLighting();
 
-    // Load saved objects
-    loadObjects(scene, objects, createObject);
+    // Load objects from API
+    try {
+        const farmObjects = await getObjectsForFarm(farmId)
+        console.log('loading objs from db')
+        farmObjects.forEach(dbObject => {
+            const position = new THREE.Vector3(dbObject.position_x, dbObject.position_y, dbObject.position_z)
+            addObject(scene, objects, dbObject.object_name, position, dbObject)
+        })
+
+        const objectCountElement = document.getElementById('object-count')
+        if(objectCountElement) objectCountElement.textContent = objects.length
+
+    }catch(error) {
+        console.error('failed to load objs')
+        alert(`error loading farm data: ${error.message}`)
+    }
+    
 
     // Setup event listeners
     const context = {
@@ -124,7 +147,7 @@ export async function init() {
         scene,
         ground,
         objectsRef: objects,
-        createObject
+        objectConfigs
     };
     setupEventListeners(context);
 

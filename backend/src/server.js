@@ -3,7 +3,9 @@ import cors from 'cors';
 import { createServer } from 'http';
 import dotenv from 'dotenv';
 import { connectDatabase } from './config/database.js';
-import userRoute from './presentation/routes/userRoute.js'; // Import user routes
+import userRoute from './presentation/routes/userRoute.js'; 
+import objectRoutes from './presentation/routes/objectRoutes.js'
+import farmRoute from './presentation/routes/farmRoute.js'
 
 dotenv.config();
 
@@ -25,7 +27,9 @@ app.use(express.json());
 connectDatabase();
 
 // API Routes
-app.use('/api/users', userRoute); // Use the user routes
+app.use('/api/users', userRoute)
+app.use('/api/farms', farmRoute)
+app.use('/api/farms/:farmId/objects', objectRoutes)
 
 // Health Check
 app.get('/api/health', (req, res) => {

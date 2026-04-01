@@ -1,7 +1,10 @@
 // THREE is loaded globally
+import { createObject as createObjectMesh } from "./objects"
+import { createObject, deleteObject } from "./apiService"
+
 
 export function setupEventListeners(context) {
-    const { renderer, camera, scene, ground, objectsRef, createObject } = context;
+    const { renderer, camera, scene, ground, objectsRef, objectConfigs } = context;
     
     // Local state variables
     let objects = objectsRef;
@@ -100,16 +103,7 @@ export function setupEventListeners(context) {
         });
     }
 
-    function addObject(type, position) {
-        const obj = createObject(type, position);
-        scene.add(obj);
-        objects.push(obj);
-        updateObjectCount();
-        saveObjects();
-        deselectAllObjects();
-    }
-
-    function removeObject(obj) {
+    async function removeObject(obj) {
         scene.remove(obj);
         const index = objects.indexOf(obj);
         if (index > -1) {
@@ -119,7 +113,7 @@ export function setupEventListeners(context) {
         saveObjects();
     }
 
-    function clearAllObjects() {
+    async function clearAllObjects() {
         objects.forEach(obj => {
             scene.remove(obj);
         });
@@ -197,6 +191,7 @@ export function setupEventListeners(context) {
         renderer.setSize(width, height);
     }
 
+    //render the objs when click on ground
     function onCanvasClick(event) {
         const rect = renderer.domElement.getBoundingClientRect();
         mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -228,7 +223,32 @@ export function setupEventListeners(context) {
                 point.y = 0;
 
                 if (Math.abs(point.x) < 40 && Math.abs(point.z) < 40) {
-                    addObject(selectedObjectType, point);
+                    const farmId = localStorage.getItem('selectedFarmId')
+
+                    const objectData = { 
+                        object_name: selectedObjectType,
+                        category: objectConfigs[selectedObjectType]?.category || 'unknown',
+                        position_x: point.x,
+                        position_y: point.y,
+                        position_z: point.z,
+                     };
+
+                    createObject(farmId, objectData)
+                        .then(newDbObject => {
+                            console.log('Object saved to DB:', newDbObject);
+                            
+                            addObject(scene, objectsRef, newDbObject.object_name, point, newDbObject);
+                            
+                            // Update UI after adding
+                            updateObjectCount();
+                            deselectAllObjects();
+                        })
+                        .catch(error => {
+                            console.error('Failed to create object:', error);
+                            alert(`Error creating object: ${error.message}`);
+                        });
+                
+
                 }
             }
         } else {
@@ -375,6 +395,18 @@ export function setupEventListeners(context) {
             hideContextMenu();
         }
     });
+}
+
+export function addObject(scene, objectsRef, type, position, dbData = null) {
+    const obj = createObjectMesh(type, position);
+    
+    if (dbData) {
+        obj.userData.dbId = dbData.id;
+        obj.userData.isRunning = dbData.is_running || false;
+    }
+    
+    scene.add(obj);
+    objectsRef.push(obj);
 }
 
 

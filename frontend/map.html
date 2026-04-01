@@ -116,7 +116,10 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
         crossorigin=""
     ></script>
-    <script>
+    <script type="module">
+
+        import { getFarmsForUser, getOrCreateFarm } from './src/apiService.js'
+
         const THAILAND_BOUNDS = [
             [5.5, 97.2],
             [20.7, 106.2]
@@ -199,60 +202,122 @@
             };
         }
 
-        function addFarmMarker(farm, sourceLabel) {
-            const marker = L.marker([farm.lat, farm.lon]).addTo(map);
-            marker.bindPopup(`
-                <strong>${farm.name}</strong><br>
-                ${farm.desc}<br>
-                <small>Lat: ${farm.lat.toFixed(4)}, Lon: ${farm.lon.toFixed(4)} (${sourceLabel})</small><br><br>
-                <button type="button" data-select-farm="${farm.name}">Select this farm</button>
-            `);
+        function addFarmMarker(farmSeed, existingFarm = null) {
+            const { label, desc } = farmSeed;
+            const coords = existingFarm ? { lat: existingFarm.latitude, lon: existingFarm.longitude } : FALLBACK_COORDS[label];
+            
+            const marker = L.marker([coords.lat, coords.lon]).addTo(map);
+            
+            // Create a unique ID or class for the button to avoid selection issues
+            const btnId = `btn-${label.replace(/\s+/g, '-')}`;
+            
+            let popupContent = `
+                <strong>${label} ${existingFarm ? '(My Farm)' : ''}</strong><br>
+                ${desc}<br><br>
+                <button type="button" id="${btnId}" class="select-farm-btn">
+                    ${existingFarm ? 'Go to this farm' : 'Select this location'}
+                </button>
+            `;
+            
+            marker.bindPopup(popupContent);
 
             marker.on('popupopen', () => {
-                const button = document.querySelector(`button[data-select-farm="${farm.name}"]`);
-                if (!button) return;
-                button.addEventListener('click', () => {
-                    localStorage.setItem('selectedFarm', farm.name);
-                    localStorage.setItem('selectedFarmGeo', JSON.stringify(farm));
-                    window.location.href = 'farm.html';
+                const button = document.getElementById(btnId); 
+
+                button.addEventListener('click', async () => {
+                    setStatus(`Processing ${label}...`);
+                    try {
+                        let farmFromDb;
+                        if (existingFarm) {
+                            farmFromDb = existingFarm;
+                        } else {
+                            // Pass the 'desc' as the 'location' field
+                            farmFromDb = await getOrCreateFarm({ 
+                                name: label, 
+                                lat: coords.lat, 
+                                lon: coords.lon,
+                                location: desc // This maps to the 'desc' in your FARM_SEEDS array
+                            });
+                        }
+
+                        localStorage.setItem('selectedFarmId', farmFromDb.id);
+                        localStorage.setItem('selectedFarm', JSON.stringify(farmFromDb));
+
+                        setStatus('Redirecting to your 3D farm...');
+                        window.location.href = 'farm.html';
+                    } catch (error) {
+                        console.error('Failed to process farm:', error);
+                        setStatus(error.message, true);
+                    }
                 });
             });
         }
+         async function loadAndDisplayFarms() {
+            setStatus('Loading your farms...');
+            try {
+                // 4. Use the imported getFarmsForUser function
+                const myFarms = await getFarmsForUser();
+                const myFarmsMap = new Map(myFarms.map(f => [f.name, f]));
 
-        async function loadRealFarmMarkers() {
-            const farms = [];
-            for (const seed of FARM_SEEDS) {
-                try {
-                    const resolved = await geocodeFarm(seed);
-                    const farm = buildFarmRecord(seed, { lat: resolved.lat, lon: resolved.lon });
-                    farms.push({ farm, source: 'API' });
-                    await new Promise((resolve) => setTimeout(resolve, 1100));
-                } catch (error) {
-                    const fallback = FALLBACK_COORDS[seed.label];
-                    if (fallback) {
-                        farms.push({ farm: buildFarmRecord(seed, fallback), source: 'fallback' });
-                    }
+                FARM_SEEDS.forEach(seed => {
+                    const existingFarm = myFarmsMap.get(seed.label);
+                    addFarmMarker(seed, existingFarm);
+                });
+
+                setStatus('Select a farm location or go to one of your existing farms.');
+
+            } catch (error) {
+                console.error('Failed to load farms:', error);
+                setStatus(error.message, true);
+                 if (error.message.includes('not logged in')) {
+                    setTimeout(() => window.location.href = 'index.html', 2000);
                 }
-            }
-
-            if (!farms.length) {
-                setStatus('Unable to load farm locations.', true);
-                return;
-            }
-
-            farms.forEach(({ farm, source }) => addFarmMarker(farm, source));
-
-            const allApi = farms.every((item) => item.source === 'API');
-            if (allApi) {
-                setStatus('Loaded real farm coordinates from API.');
-            } else {
-                setStatus('Loaded farm coordinates (some used fallback when API was unavailable).');
             }
         }
 
-        loadRealFarmMarkers().catch(() => {
-            setStatus('Unexpected error while loading farm locations.', true);
+        window.addEventListener('load', () => {
+            if (!localStorage.getItem('farmverseToken')) {
+                setStatus('You must be logged in. Redirecting...', true);
+                setTimeout(() => { window.location.href = 'index.html'; }, 2500);
+            } else {
+                loadAndDisplayFarms();
+            }
         });
+
+        // async function loadRealFarmMarkers() {
+        //     const farms = [];
+        //     for (const seed of FARM_SEEDS) {
+        //         try {
+        //             const resolved = await geocodeFarm(seed);
+        //             const farm = buildFarmRecord(seed, { lat: resolved.lat, lon: resolved.lon });
+        //             farms.push({ farm, source: 'API' });
+        //             await new Promise((resolve) => setTimeout(resolve, 1100));
+        //         } catch (error) {
+        //             const fallback = FALLBACK_COORDS[seed.label];
+        //             if (fallback) {
+        //                 farms.push({ farm: buildFarmRecord(seed, fallback), source: 'fallback' });
+        //             }
+        //         }
+        //     }
+
+        //     if (!farms.length) {
+        //         setStatus('Unable to load farm locations.', true);
+        //         return;
+        //     }
+
+        //     farms.forEach(({ farm, source }) => addFarmMarker(farm, source));
+
+        //     const allApi = farms.every((item) => item.source === 'API');
+        //     if (allApi) {
+        //         setStatus('Loaded real farm coordinates from API.');
+        //     } else {
+        //         setStatus('Loaded farm coordinates (some used fallback when API was unavailable).');
+        //     }
+        // }
+
+        // loadRealFarmMarkers().catch(() => {
+        //     setStatus('Unexpected error while loading farm locations.', true);
+        // });
     </script>
 </body>
 </html>

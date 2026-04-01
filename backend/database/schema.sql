@@ -19,20 +19,19 @@ CREATE TABLE farms (
     area DECIMAL(10, 2)
 );
 
--- Plants Table
-CREATE TABLE plants (
+CREATE TABLE objects (
     id SERIAL PRIMARY KEY,
     farm_id INTEGER NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
-    plant_name VARCHAR(100) NOT NULL,
-    plant_type VARCHAR(50) NOT NULL,
-    quantity INTEGER DEFAULT 1,
-    position_x DECIMAL(10, 2) DEFAULT 0,
-    position_y DECIMAL(10, 2) DEFAULT 0,
-    position_z DECIMAL(10, 2) DEFAULT 0,
-    health_status VARCHAR(20) DEFAULT 'healthy'
+    object_name VARCHAR(100) NOT NULL, -- e.g., 'Carrot', 'Sprinkler', 'Chicken'
+    category VARCHAR(100) NOT NULL,    -- e.g., 'crops', 'iot', 'animals'
+    position_x NUMERIC(10, 4) NOT NULL,
+    position_y NUMERIC(10, 4) NOT NULL,
+    position_z NUMERIC(10, 4) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Indexes for better performance
 CREATE INDEX idx_farms_user_id ON farms(user_id);
-CREATE INDEX idx_plants_farm_id ON plants(farm_id);
+CREATE INDEX idx_objects_farm_id ON objects(farm_id);
 CREATE INDEX idx_users_email ON users(email);

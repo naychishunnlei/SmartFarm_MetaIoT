@@ -282,10 +282,20 @@
             </div>
         </div>
     </div>
-    <script>
-        // Load selected farm name from localStorage
-        const selectedFarm = localStorage.getItem('selectedFarm') || 'Default Farm';
-        document.getElementById('selected-farm-name').textContent = selectedFarm;
+   <script>
+        const farmDataString = localStorage.getItem('selectedFarm');
+        let displayName = 'Default Farm';
+
+        if (farmDataString) {
+            try {
+                const selectedFarm = JSON.parse(farmDataString);
+                displayName = selectedFarm.name || 'Unnamed Farm';
+            } catch (e) {
+                console.error("Error parsing farm data from localStorage", e);
+            }
+        }
+        
+        document.getElementById('selected-farm-name').textContent = displayName;
     </script>
     <script type="module">
         // Load Three.js from esm.sh (ES module CDN)
