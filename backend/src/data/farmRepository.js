@@ -30,6 +30,16 @@ class FarmRepository {
         const result = await pool.query(query, [userId])
         return result.rows
     }
+
+    async deleteByIdAndUser(farmId, userId) {
+        const query = `
+            DELETE FROM farms
+            WHERE id = $1 AND user_id = $2
+            RETURNING *;
+        `
+        const result = await pool.query(query, [farmId, userId])
+        return result.rows[0]
+    }
 }
 
 export default new FarmRepository()

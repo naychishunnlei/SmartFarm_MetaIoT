@@ -47,5 +47,7 @@ export const deleteObject = (farmId, objectId) => request(`/farms/${farmId}/obje
 
 export const getFarmsForUser = () => request('/farms', 'GET');
 export const getOrCreateFarm = (farmData) => request('/farms', 'POST', farmData);
+export const createFarm = (farmData) => request('/farms/create', 'POST', farmData);
+export const deleteFarm = (farmId) => request(`/farms/${farmId}`, 'DELETE');
 
 

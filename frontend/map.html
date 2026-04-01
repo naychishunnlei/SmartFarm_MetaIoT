@@ -83,6 +83,25 @@
             font-family: 'Poppins', sans-serif;
         }
 
+        .map-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .map-action-btn {
+            border: none;
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            font-weight: 600;
+            background: #ffffff;
+            color: #333333;
+        }
+
+        .map-action-btn.active {
+            background: #ffd54f;
+        }
+
         .footer {
             text-align: center;
             padding: 1rem;
@@ -97,7 +116,9 @@
             <h1>Farmverse</h1>
         </div>
         <div class="nav">
-            <span style="color: white;">Thailand Farm Locations (API)</span>
+            <div class="map-actions">
+                <button id="add-farm-mode-btn" class="map-action-btn" type="button">Add New Farm Location</button>
+            </div>
         </div>
     </div>
 
@@ -118,7 +139,7 @@
     ></script>
     <script type="module">
 
-        import { getFarmsForUser, getOrCreateFarm } from './src/apiService.js'
+        import { getFarmsForUser, getOrCreateFarm, createFarm, deleteFarm } from './src/apiService.js'
 
         const THAILAND_BOUNDS = [
             [5.5, 97.2],
@@ -141,7 +162,28 @@
             'Ayutthaya Farm': { lat: 14.3532, lon: 100.5689 }
         };
 
+        const SEED_LABELS = new Set(FARM_SEEDS.map((s) => s.label));
+        const HIDDEN_SEEDS_KEY = 'farmverseHiddenSeedFarms';
+
+        function getHiddenSeedLabels() {
+            try {
+                const raw = localStorage.getItem(HIDDEN_SEEDS_KEY);
+                return raw ? JSON.parse(raw) : [];
+            } catch {
+                return [];
+            }
+        }
+
+        function hideSeedFarmLabel(label) {
+            if (!SEED_LABELS.has(label)) return;
+            const set = new Set(getHiddenSeedLabels());
+            set.add(label);
+            localStorage.setItem(HIDDEN_SEEDS_KEY, JSON.stringify([...set]));
+        }
+
         const mapStatus = document.getElementById('map-status');
+        const addFarmModeBtn = document.getElementById('add-farm-mode-btn');
+        let addFarmMode = false;
         const map = L.map('map', {
             minZoom: 5,
             maxZoom: 12
@@ -202,6 +244,14 @@
             };
         }
 
+        function normalizeFarmRecord(farm) {
+            return {
+                ...farm,
+                latitude: Number(farm.latitude),
+                longitude: Number(farm.longitude)
+            };
+        }
+
         function addFarmMarker(farmSeed, existingFarm = null) {
             const { label, desc } = farmSeed;
             const coords = existingFarm ? { lat: existingFarm.latitude, lon: existingFarm.longitude } : FALLBACK_COORDS[label];
@@ -211,20 +261,24 @@
             // Create a unique ID or class for the button to avoid selection issues
             const btnId = `btn-${label.replace(/\s+/g, '-')}`;
             
+            const deleteBtnId = `delete-${label.replace(/\s+/g, '-')}-${existingFarm ? existingFarm.id : 'seed'}`;
             let popupContent = `
                 <strong>${label} ${existingFarm ? '(My Farm)' : ''}</strong><br>
                 ${desc}<br><br>
                 <button type="button" id="${btnId}" class="select-farm-btn">
                     ${existingFarm ? 'Go to this farm' : 'Select this location'}
                 </button>
+                <br><br>
+                <button type="button" id="${deleteBtnId}" class="select-farm-btn" style="background:#f44336;">Delete farm</button>
             `;
             
             marker.bindPopup(popupContent);
 
             marker.on('popupopen', () => {
-                const button = document.getElementById(btnId); 
+                const button = document.getElementById(btnId);
+                const deleteButton = document.getElementById(deleteBtnId);
 
-                button.addEventListener('click', async () => {
+                button.onclick = async () => {
                     setStatus(`Processing ${label}...`);
                     try {
                         let farmFromDb;
@@ -249,19 +303,86 @@
                         console.error('Failed to process farm:', error);
                         setStatus(error.message, true);
                     }
-                });
+                };
+
+                deleteButton.onclick = async () => {
+                    const msg = existingFarm
+                        ? `Delete "${label}"? This removes all objects in this farm from the server.`
+                        : `Remove "${label}" from the map? (Preset locations stay hidden until you clear browser data.)`;
+                    if (!confirm(msg)) return;
+
+                    try {
+                        if (existingFarm) {
+                            await deleteFarm(existingFarm.id);
+                            const selectedFarmId = localStorage.getItem('selectedFarmId');
+                            if (selectedFarmId && Number(selectedFarmId) === Number(existingFarm.id)) {
+                                localStorage.removeItem('selectedFarmId');
+                                localStorage.removeItem('selectedFarm');
+                            }
+                        }
+                        hideSeedFarmLabel(label);
+                        map.removeLayer(marker);
+                        setStatus(`Removed ${label}.`);
+                    } catch (error) {
+                        console.error('Failed to delete farm:', error);
+                        setStatus(error.message, true);
+                    }
+                };
             });
+        }
+
+        async function addCustomFarmAt(latlng) {
+            const name = prompt('Enter a name for the new farm location:');
+            if (!name) return;
+
+            const location = prompt('Enter short location/description:', 'Custom farm location') || 'Custom farm location';
+
+            setStatus('Creating your new farm...');
+            try {
+                const createdFarm = await createFarm({
+                    name: name.trim(),
+                    lat: latlng.lat,
+                    lon: latlng.lng,
+                    location: location.trim()
+                });
+
+                const normalizedFarm = normalizeFarmRecord(createdFarm);
+                addFarmMarker(
+                    { label: normalizedFarm.name, desc: normalizedFarm.location || 'Custom farm location' },
+                    normalizedFarm
+                );
+
+                setStatus(`Created "${normalizedFarm.name}". Click its marker to enter the farm.`);
+            } catch (error) {
+                console.error('Failed to create farm:', error);
+                setStatus(error.message, true);
+            }
         }
          async function loadAndDisplayFarms() {
             setStatus('Loading your farms...');
             try {
                 // 4. Use the imported getFarmsForUser function
                 const myFarms = await getFarmsForUser();
-                const myFarmsMap = new Map(myFarms.map(f => [f.name, f]));
+                const normalizedFarms = myFarms.map(normalizeFarmRecord);
+                const existingNames = new Set(normalizedFarms.map((farm) => farm.name));
+                const hiddenSeeds = new Set(getHiddenSeedLabels());
 
-                FARM_SEEDS.forEach(seed => {
-                    const existingFarm = myFarmsMap.get(seed.label);
-                    addFarmMarker(seed, existingFarm);
+                // Render all farms that already exist in DB (including custom ones)
+                normalizedFarms.forEach((farm) => {
+                    addFarmMarker(
+                        {
+                            label: farm.name,
+                            desc: farm.location || 'Custom farm location'
+                        },
+                        farm
+                    );
+                });
+
+                // Render default seeds that user has not created yet and has not removed from map
+                FARM_SEEDS.forEach((seed) => {
+                    if (!existingNames.has(seed.label) && !hiddenSeeds.has(seed.label)) {
+                        addFarmMarker(seed, null);
+                    }
                 });
 
                 setStatus('Select a farm location or go to one of your existing farms.');
@@ -282,6 +403,22 @@
             } else {
                 loadAndDisplayFarms();
             }
+        });
+
+        addFarmModeBtn.addEventListener('click', () => {
+            addFarmMode = !addFarmMode;
+            addFarmModeBtn.classList.toggle('active', addFarmMode);
+
+            if (addFarmMode) {
+                setStatus('Add mode enabled: click on map to create a new farm location.');
+            } else {
+                setStatus('Select a farm location or go to one of your existing farms.');
+            }
+        });
+
+        map.on('click', (event) => {
+            if (!addFarmMode) return;
+            addCustomFarmAt(event.latlng);
         });
 
         // async function loadRealFarmMarkers() {
