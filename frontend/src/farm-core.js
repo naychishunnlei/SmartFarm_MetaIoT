@@ -9,6 +9,12 @@ import { getObjectsForFarm } from './apiService.js';
 let scene, camera, renderer, controls;
 let ground;
 let objects = [];
+let skyTexture;
+let ambientLight;
+let sunLight;
+let hemiLight;
+let fillLight;
+let isNightMode = false;
 let selectedObjectType = null;
 let deleteMode = false;
 let raycaster, mouse;
@@ -64,20 +70,10 @@ export async function init() {
     }
     // Create scene
     scene = new THREE.Scene();
-    
-    // Create gradient sky background
-    const canvas = document.createElement('canvas');
-    canvas.width = 2;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d');
-    const gradient = ctx.createLinearGradient(0, 0, 0, 512);
-    gradient.addColorStop(0, '#87CEEB');
-    gradient.addColorStop(0.5, '#E0F6FF');
-    gradient.addColorStop(1, '#F0FFF0');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 2, 512);
-    
-    const skyTexture = new THREE.CanvasTexture(canvas);
+
+    const storedNight = localStorage.getItem('farmverseSkyNight') === '1';
+    isNightMode = storedNight;
+    skyTexture = createSkyTexture(THREE, isNightMode);
     scene.background = skyTexture;
 
     // Create camera
@@ -121,6 +117,8 @@ export async function init() {
 
     // Setup lighting
     setupLighting();
+    applyDayNightLighting(isNightMode);
+    setupDayNightToggle();
 
     // Load objects from API
     try {
@@ -311,14 +309,99 @@ function createDecoTree(x, z) {
     scene.add(foliage2);
 }
 
+function createSkyTexture(THREE, night) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 2;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, 512);
+    if (night) {
+        // Moonlit sky: readable but clearly "night" (not pitch black)
+        gradient.addColorStop(0, '#1a2840');
+        gradient.addColorStop(0.35, '#2a3a55');
+        gradient.addColorStop(0.65, '#243228');
+        gradient.addColorStop(1, '#1a221c');
+    } else {
+        gradient.addColorStop(0, '#87CEEB');
+        gradient.addColorStop(0.5, '#E0F6FF');
+        gradient.addColorStop(1, '#F0FFF0');
+    }
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 2, 512);
+    const tex = new THREE.CanvasTexture(canvas);
+    if (THREE.SRGBColorSpace !== undefined) {
+        tex.colorSpace = THREE.SRGBColorSpace;
+    }
+    return tex;
+}
+
+function applyDayNightLighting(night) {
+    if (!ambientLight || !sunLight || !hemiLight || !fillLight || !renderer) return;
+
+    if (night) {
+        ambientLight.color.setHex(0xc8d4e8);
+        ambientLight.intensity = 0.42;
+        sunLight.color.setHex(0xb8c8e8);
+        sunLight.intensity = 0.55;
+        hemiLight.color.setHex(0x3a5080);
+        hemiLight.groundColor.setHex(0x283828);
+        hemiLight.intensity = 0.48;
+        fillLight.color.setHex(0x6a8cc8);
+        fillLight.intensity = 0.32;
+        renderer.toneMappingExposure = 0.78;
+    } else {
+        ambientLight.color.setHex(0xffffff);
+        ambientLight.intensity = 0.7;
+        sunLight.color.setHex(0xfffaf0);
+        sunLight.intensity = 1.3;
+        hemiLight.color.setHex(0x87ceeb);
+        hemiLight.groundColor.setHex(0x4a7c4e);
+        hemiLight.intensity = 0.6;
+        fillLight.color.setHex(0xfff5e6);
+        fillLight.intensity = 0.5;
+        renderer.toneMappingExposure = 1.2;
+    }
+}
+
+function updateDayNightUi() {
+    const btn = document.getElementById('day-night-toggle');
+    const icon = document.querySelector('.day-night-icon');
+    const label = document.querySelector('.day-night-label');
+    const weatherIcon = document.getElementById('weather-icon-display');
+    const condition = document.getElementById('weather-condition-display');
+
+    if (btn) btn.setAttribute('aria-pressed', isNightMode ? 'true' : 'false');
+    if (icon) icon.textContent = isNightMode ? '🌙' : '☀️';
+    if (label) label.textContent = isNightMode ? 'Night' : 'Day';
+    if (weatherIcon) weatherIcon.textContent = isNightMode ? '🌙' : '☀️';
+    if (condition) condition.textContent = isNightMode ? 'Clear night' : 'Sunny';
+}
+
+function setupDayNightToggle() {
+    const btn = document.getElementById('day-night-toggle');
+    if (!btn) return;
+
+    updateDayNightUi();
+
+    btn.addEventListener('click', () => {
+        isNightMode = !isNightMode;
+        localStorage.setItem('farmverseSkyNight', isNightMode ? '1' : '0');
+
+        if (skyTexture) skyTexture.dispose();
+        skyTexture = createSkyTexture(THREE, isNightMode);
+        scene.background = skyTexture;
+
+        applyDayNightLighting(isNightMode);
+        updateDayNightUi();
+    });
+}
+
 // Setup lighting
 function setupLighting() {
-    // Ambient light
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
 
-    // Main sun light
-    const sunLight = new THREE.DirectionalLight(0xfffaf0, 1.3);
+    sunLight = new THREE.DirectionalLight(0xfffaf0, 1.3);
     sunLight.position.set(20, 30, 20);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
@@ -332,12 +415,10 @@ function setupLighting() {
     sunLight.shadow.bias = -0.0001;
     scene.add(sunLight);
 
-    // Hemisphere light
-    const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x4a7c4e, 0.6);
+    hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x4a7c4e, 0.6);
     scene.add(hemiLight);
-    
-    // Fill light
-    const fillLight = new THREE.DirectionalLight(0xfff5e6, 0.5);
+
+    fillLight = new THREE.DirectionalLight(0xfff5e6, 0.5);
     fillLight.position.set(-10, 10, -10);
     scene.add(fillLight);
 }
