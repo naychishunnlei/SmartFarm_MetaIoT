@@ -1,12 +1,5 @@
-import { registerUser, loginUser } from './apiService.js';
+import { registerUser, loginUser } from './apiService.js'
 
-/**
- * Handles the user registration form submission.
- * @param {string} name
- * @param {string} email
- * @param {string} password
- * @returns {Promise<object>} The server response.
- */
 export async function handleRegister(name, email, password) {
     try {
         const response = await registerUser({ name, email, password });

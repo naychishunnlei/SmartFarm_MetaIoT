@@ -3,7 +3,7 @@
 // THREE, OrbitControls, and GLTFLoader are loaded globally
 import { setupEventListeners, addObject } from './utils.js';
 import { createObject } from './objects.js'
-import { getObjectsForFarm } from './apiService.js';
+import { getObjectsForFarm, updateObjectGrowth } from './apiService.js';
 
 // Global variables
 let scene, camera, renderer, controls;
@@ -20,6 +20,11 @@ let deleteMode = false;
 let raycaster, mouse;
 let contextMenuTarget = null;
 
+const keys = { w: false, a: false, s: false, d: false }
+
+//sample sensor data
+let farmSoilMoisture = 0.6
+let farmWaterLevel = 0.8
 // Object configurations
 const objectConfigs = {
     // Crops
@@ -42,7 +47,7 @@ const objectConfigs = {
     humiditySensor: { name: 'Humidity Sensor', emoji: '💦', category: 'iot' },
     waterPump: { name: 'Water Pump', emoji: '⛽', category: 'iot' },
     sprinkler: { name: 'Sprinkler', emoji: '🚿', category: 'iot' },
-    esp32: { name: 'ESP32', emoji: '🔌', category: 'iot' },
+    fan: { name: 'Fan', emoji: '🌀', category: 'iot' },
     // Animals
     chicken: { name: 'Chicken', emoji: '🐔', category: 'animals' },
     cow: { name: 'Cow', emoji: '🐄', category: 'animals' },
@@ -125,8 +130,12 @@ export async function init() {
         const farmObjects = await getObjectsForFarm(farmId)
         console.log('loading objs from db')
         farmObjects.forEach(dbObject => {
-            const position = new THREE.Vector3(dbObject.position_x, dbObject.position_y, dbObject.position_z)
-            addObject(scene, objects, dbObject.object_name, position, dbObject)
+            const position = new THREE.Vector3(
+                parseFloat(dbObject.position_x), 
+                parseFloat(dbObject.position_y), 
+                parseFloat(dbObject.position_z)
+            )
+            addObject(scene, objects, dbObject.object_name, position, dbObject, objectConfigs)
         })
 
         const objectCountElement = document.getElementById('object-count')
@@ -147,7 +156,9 @@ export async function init() {
         objectsRef: objects,
         objectConfigs
     };
-    setupEventListeners(context);
+    setupEventListeners(context)
+
+    setupCameraView()
 
     // Hide loading screen
     setTimeout(() => {
@@ -158,8 +169,60 @@ export async function init() {
     }, 1500);
 
     // Start animation loop
-    animate();
+    animate()
+
+    setInterval(() => {
+        if(!farmId) return
+
+        objects.forEach(obj => {
+            if (obj.userData.category === 'crops' && obj.userData.dbId) {
+                if (obj.userData.growth <= 1.0) {
+                    updateObjectGrowth(farmId, obj.userData.dbId, obj.userData.growth)
+                }
+            }
+        })
+    }, 10000)
 }
+
+
+//setup camera view
+function setupCameraView() {
+    window.addEventListener('keydown', (e) => {
+        // Ignore if user is typing in an input field
+        if (e.target.tagName === 'INPUT') return
+
+        const key = e.key.toLowerCase()
+        if (keys.hasOwnProperty(key)) keys[key] = true
+
+        switch(e.key) {
+            case '1': // Drone View (Default Isometric)
+                camera.position.set(15, 12, 15);
+                controls.target.set(0, 0, 0);
+                controls.minDistance = 8;
+                controls.maxDistance = 35;
+                controls.maxPolarAngle = Math.PI / 2.2;
+                break;
+            case '2': // Top View (Planner Mode)
+                // Z is 0.1 to avoid OrbitControls gimbal lock when looking perfectly straight down
+                camera.position.set(0, 30, 0.1); 
+                controls.target.set(0, 0, 0);
+                break;
+            case '3': // First-person View (Ground level)
+                camera.position.set(0, 1.5, 12); 
+                controls.target.set(0, 1.5, 0);
+                controls.minDistance = 0.1;
+                controls.maxPolarAngle = Math.PI / 2; // Prevent looking below ground
+                break;
+        }
+        controls.update(); 
+    });
+
+    window.addEventListener('keyup', (e) => {
+        const key = e.key.toLowerCase();
+        if (keys.hasOwnProperty(key)) keys[key] = false;
+    })
+}
+
 
 // Create the farm environment
 function createEnvironment() {
@@ -265,48 +328,6 @@ function createFarmFence() {
             });
         });
     }
-}
-
-// Create decorations around the farm
-function createDecorations() {
-    // Add trees at random positions around the farm (outside the fence)
-    for (let i = 0; i < 10; i++) {
-        let x, z;
-        do {
-            x = (Math.random() - 0.5) * 40;
-            z = (Math.random() - 0.5) * 40;
-        } while (Math.abs(x) < 10 && Math.abs(z) < 10);
-        
-        createDecoTree(x, z);
-    }
-}
-
-// Create decorative tree
-function createDecoTree(x, z) {
-    const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.4, 2, 8);
-    const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x4a3728 });
-    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-    trunk.position.set(x, 1, z);
-    trunk.castShadow = true;
-    scene.add(trunk);
-    
-    const foliageMaterial = new THREE.MeshStandardMaterial({ color: 0x2d5a27 });
-    
-    const foliage1 = new THREE.Mesh(
-        new THREE.ConeGeometry(1.8, 2.5, 8),
-        foliageMaterial
-    );
-    foliage1.position.set(x, 3, z);
-    foliage1.castShadow = true;
-    scene.add(foliage1);
-    
-    const foliage2 = new THREE.Mesh(
-        new THREE.ConeGeometry(1.4, 2, 8),
-        foliageMaterial
-    );
-    foliage2.position.set(x, 4.2, z);
-    foliage2.castShadow = true;
-    scene.add(foliage2);
 }
 
 function createSkyTexture(THREE, night) {
@@ -425,11 +446,58 @@ function setupLighting() {
 
 // Animation loop
 function animate() {
-    requestAnimationFrame(animate);
-    controls.update();
+    requestAnimationFrame(animate)
+
+    // --- WASD Movement Logic ---
+    if (keys.w || keys.a || keys.s || keys.d) {
+        const moveSpeed = 0.3; // Adjust speed as needed
+        const front = new THREE.Vector3();
+        const right = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+
+        // Get where the camera is looking
+        camera.getWorldDirection(front);
+        front.y = 0; // Lock movement purely to the horizontal XZ plane
+        front.normalize();
+
+        // Get the right-facing direction
+        right.crossVectors(front, camera.up).normalize();
+
+        if (keys.w) direction.add(front);
+        if (keys.s) direction.sub(front);
+        if (keys.a) direction.sub(right);
+        if (keys.d) direction.add(right);
+
+        direction.normalize().multiplyScalar(moveSpeed);
+
+        // Move both camera and its look target evenly
+        camera.position.add(direction);
+        controls.target.add(direction);
+    }
+
+    controls.update()
+
+    //growth rate
+    const baseGrowthRate = 0.0003
+    const moistureFactor = 1.0 - Math.abs(0.7 - farmSoilMoisture) * 2
+    const waterFactor = Math.min(farmWaterLevel, 1.0)
+    const effectiveGrowthRate = Math.max(0, baseGrowthRate * moistureFactor * waterFactor)
 
     // Update active sprinkler water particles (when isRunning === true)
     objects.forEach(obj => {
+
+        //Handle Crop Growth
+        if (obj.userData.category === 'crops') {
+            if (obj.userData.growth < 1.0) {
+                obj.userData.growth += effectiveGrowthRate;
+                if (obj.userData.growth > 1.0) obj.userData.growth = 1.0;
+                
+                // Scale the crop based on its new growth value
+                const g = obj.userData.growth;
+                obj.scale.set(g, g, g);
+            }
+        }
+
         if (obj.userData.type === 'sprinkler' && obj.userData.isRunning && obj.waterEffect) {
             updateSprinklerWater(obj.waterEffect)
         }

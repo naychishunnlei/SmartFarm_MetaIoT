@@ -41,6 +41,23 @@ class ObjectService {
             throw new Error('Failed to delete the object.');
         }
     }
+
+    async deleteAllObjects(userId, farmId) {
+        const farm = await farmRepository.findById(farmId)
+        if (!farm || farm.user_id !== userId) {
+            throw new Error('Forbidden: You do not have permission on this farm.');
+        }
+        return await objectRepository.deleteAll(farmId)
+
+    }
+
+    async updateObjectGrowth(userId, farmId, objectId, growth) {
+        const farm = await farmRepository.findById(farmId)
+        if (!farm || farm.user_id !== userId) {
+            throw new Error('forbidden: do not belong to this farm')
+        }
+        return await objectRepository.updateGrowth(objectId, growth)
+    }
 }
 
 export default new ObjectService()

@@ -40,10 +40,22 @@ export function createObject(type, position) {
         case 'path': createPath(group); break;
     }
 
-    group.position.copy(position);
-    group.userData = { type: type, id: Date.now() + Math.random() };
+    group.position.copy(position)
+    group.userData = { 
+        type: type, 
+        id: Date.now() + Math.random(),
+        growth: 0.4,
+    }
 
-    return group;
+    // If it is a crop, set its initial scale to be very small
+    const cropTypes = ['tomato', 'carrot', 'corn', 'wheat', 'sunflower', 'cabbage'];
+    if (cropTypes.includes(type)) {
+        group.userData.category = 'crops';
+        const g = group.userData.growth;
+        group.scale.set(g, g, g); // Scale down to 10% size
+    }
+
+    return group
 }
 
 // ==================== CROPS ====================
@@ -251,19 +263,6 @@ function createCabbage(group) {
 // ==================== INFRASTRUCTURE ====================
 
 function createSoilBed(group) {
-    // Wooden frame
-    // const woodMaterial = new THREE.MeshStandardMaterial({ color: 0x8b5a2b });
-    // const frameGeometry = new THREE.BoxGeometry(1.5, 0.2, 0.1);
-    
-    // // Four sides
-    // [[-0.7, 0], [0.7, 0], [0, -0.7], [0, 0.7]].forEach(([x, z], i) => {
-    //     const frame = new THREE.Mesh(frameGeometry, woodMaterial);
-    //     frame.position.set(x || 0, 0.1, z || 0);
-    //     if (i >= 2) frame.rotation.y = Math.PI / 2;
-    //     frame.castShadow = true;
-    //     group.add(frame);
-    // });
-
     // Soil inside
     const soilGeometry = new THREE.BoxGeometry(1.3, 0.15, 1.3);
     const soilMaterial = new THREE.MeshStandardMaterial({ color: 0x4a3728 });

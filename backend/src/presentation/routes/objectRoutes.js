@@ -8,5 +8,7 @@ router.use(authMiddleware)
 router.post('/', objectController.create)
 router.get('/', objectController.getAllForFarm)
 router.delete('/:objectId', objectController.delete)
+router.delete('/', objectController.deleteAll)
+router.put('/:objectId/growth', objectController.updateGrowth)
 
 export default router

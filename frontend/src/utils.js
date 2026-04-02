@@ -1,6 +1,6 @@
 // THREE is loaded globally
 import { createObject as createObjectMesh } from "./objects"
-import { createObject, deleteObject } from "./apiService"
+import { createObject, deleteObject, deleteAllObjects } from "./apiService"
 
 
 export function setupEventListeners(context) {
@@ -42,7 +42,9 @@ export function setupEventListeners(context) {
                 y: obj.position.y,
                 z: obj.position.z
             },
-            isRunning: obj.userData.isRunning || false  
+            isRunning: obj.userData.isRunning || false,
+            growth: obj.userData.growth || 1.0
+ 
 
         }));
         localStorage.setItem('farmObjects', JSON.stringify(saveData));
@@ -104,24 +106,44 @@ export function setupEventListeners(context) {
     }
 
     async function removeObject(obj) {
-        scene.remove(obj);
-        const index = objects.indexOf(obj);
-        if (index > -1) {
-            objects.splice(index, 1);
+        const farmId = localStorage.getItem('selectedFarmId')
+        try {
+            if (obj.userData.dbId) {
+                await deleteObject(farmId, obj.userData.dbId)
+            }
+
+            scene.remove(obj)
+            const index = objects.indexOf(obj)
+            if (index > -1) {
+                objects.splice(index, 1)
+            }
+            updateObjectCount()
+            saveObjects()
+        } catch (error) {
+            console.error('failed to delete obj')
         }
-        updateObjectCount();
-        saveObjects();
     }
 
     async function clearAllObjects() {
-        objects.forEach(obj => {
-            scene.remove(obj);
-        });
-        objects.length = 0;
-        updateObjectCount();
-        saveObjects();
-    }
+        const farmId = localStorage.getItem('selectedFarmId');
+        
+        try {
+            // Single API call to wipe the database for this farm
+            await deleteAllObjects(farmId);
+            console.log('All objects deleted from database.');
 
+            // Clear the 3D scene
+            objects.forEach(obj => {
+                scene.remove(obj);
+            });
+            objects.length = 0;
+            updateObjectCount();
+            saveObjects();
+        } catch (error) {
+            console.error('Failed to clear objects:', error);
+            alert(`Error clearing objects: ${error.message}`);
+        }
+    }
     function showContextMenu(x, y, targetObject) {
         contextMenuTarget = targetObject;
         const contextMenu = document.getElementById('context-menu');
@@ -237,7 +259,7 @@ export function setupEventListeners(context) {
                         .then(newDbObject => {
                             console.log('Object saved to DB:', newDbObject);
                             
-                            addObject(scene, objectsRef, newDbObject.object_name, point, newDbObject);
+                            addObject(scene, objectsRef, newDbObject.object_name, point, newDbObject, objectConfigs);
                             
                             // Update UI after adding
                             updateObjectCount();
@@ -397,16 +419,32 @@ export function setupEventListeners(context) {
     });
 }
 
-export function addObject(scene, objectsRef, type, position, dbData = null) {
-    const obj = createObjectMesh(type, position);
+export function addObject(scene, objectsRef, type, position, dbData = null, objectConfigs = null) {
+    
+    const obj = createObjectMesh(type, position)
+    
+    const defaultCategory = obj.userData.category || 'unknown'
+    const category = objectConfigs && objectConfigs[type] ? objectConfigs[type].category : defaultCategory
+    obj.userData.category = category
+
+    obj.userData.growth = 0.4
     
     if (dbData) {
         obj.userData.dbId = dbData.id;
         obj.userData.isRunning = dbData.is_running || false;
+        if (dbData.growth !== undefined) {
+            obj.userData.growth = parseFloat(dbData.growth)
+        }
     }
     
-    scene.add(obj);
-    objectsRef.push(obj);
+    // Initial scaling for crops
+    if (category === 'crops') {
+        const g = Math.max(0.4, Math.min(obj.userData.growth, 1.0))
+        obj.scale.set(g, g, g)
+    }
+    
+    scene.add(obj)
+    objectsRef.push(obj)
 }
 
 
