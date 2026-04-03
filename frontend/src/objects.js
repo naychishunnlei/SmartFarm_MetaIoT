@@ -24,6 +24,7 @@ export function createObject(type, position) {
         case 'waterPump': createWaterPump(group); break;
         case 'sprinkler': createSprinkler(group); break;
         case 'fan': createFan(group); break;
+        case 'streetLight' : createStreetLight(group); break;
         // Animals
         case 'chicken': createChicken(group); break;
         case 'cow': createCow(group); break;
@@ -636,54 +637,58 @@ function createSprinklerWater(position) {
 
 }
 
-function createESP32(group) {
-    // PCB board
-    const pcbMaterial = new THREE.MeshStandardMaterial({ color: 0x1b5e20 });
-    const pcbGeometry = new THREE.BoxGeometry(0.25, 0.02, 0.12);
-    const pcb = new THREE.Mesh(pcbGeometry, pcbMaterial);
-    pcb.position.y = 0.25;
-    pcb.castShadow = true;
-    group.add(pcb);
-
-    // Chip
-    const chipMaterial = new THREE.MeshStandardMaterial({ color: 0x212121 });
-    const chipGeometry = new THREE.BoxGeometry(0.08, 0.015, 0.08);
-    const chip = new THREE.Mesh(chipGeometry, chipMaterial);
-    chip.position.set(0, 0.27, 0);
-    group.add(chip);
-
-    // USB port
-    const usbMaterial = new THREE.MeshStandardMaterial({ color: 0x9e9e9e });
-    const usbGeometry = new THREE.BoxGeometry(0.04, 0.015, 0.03);
-    const usb = new THREE.Mesh(usbGeometry, usbMaterial);
-    usb.position.set(-0.12, 0.26, 0);
-    group.add(usb);
-
-    // Antenna
-    const antennaMaterial = new THREE.MeshStandardMaterial({ color: 0x757575 });
-    const antennaGeometry = new THREE.BoxGeometry(0.06, 0.015, 0.025);
-    const antenna = new THREE.Mesh(antennaGeometry, antennaMaterial);
-    antenna.position.set(0.1, 0.27, 0);
-    group.add(antenna);
-
-    // Stand
-    const standGeometry = new THREE.BoxGeometry(0.15, 0.23, 0.08);
-    const standMaterial = new THREE.MeshStandardMaterial({ color: 0x37474f });
-    const stand = new THREE.Mesh(standGeometry, standMaterial);
-    stand.position.y = 0.115;
-    stand.castShadow = true;
-    group.add(stand);
-
-    // LED indicators
-    const ledColors = [0x4caf50, 0xf44336];
-    ledColors.forEach((color, i) => {
-        const ledMaterial = new THREE.MeshStandardMaterial({ color: color, emissive: color });
-        const ledGeometry = new THREE.SphereGeometry(0.01, 8, 8);
-        const led = new THREE.Mesh(ledGeometry, ledMaterial);
-        led.position.set(0.05, 0.27, -0.04 + i * 0.03);
-        group.add(led);
+function createStreetLight(group) {
+    const metalMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7, metalness: 0.8 });
+    const lightMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xffffaa, 
+        emissive: 0xfff0aa, 
+        emissiveIntensity: 0 
     });
+
+    // Pole
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 4, 8), metalMaterial);
+    pole.position.y = 2;
+    pole.castShadow = true;
+    group.add(pole);
+
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.2, 8), metalMaterial);
+    arm.rotation.z = Math.PI / 2;
+    arm.position.set(0.5, 3.8, 0); 
+    group.add(arm);
+
+    // Lamp cap
+    const lamp = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.3, 8), metalMaterial);
+    lamp.position.set(1.0, 3.7, 0);
+    group.add(lamp);
+
+    // Glowing bulb
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), lightMaterial);
+    bulb.position.set(1.0, 3.65, 0);
+    group.add(bulb);
+
+    // SpotLight (Actual lighting)
+    const light = new THREE.SpotLight(0xfff0aa, 0); 
+    light.position.set(1.0, 3.5, 0);
+    light.angle = Math.PI / 2.5; 
+    light.penumbra = 0.5;
+    light.decay = 0.6;
+    light.distance = 0; 
+    light.castShadow = false;
+
+    // Target slightly down and forward
+    const targetObject = new THREE.Object3D();
+    targetObject.position.set(20, -2, 0); 
+    group.add(targetObject);
+    light.target = targetObject;
+    
+    group.add(light);
+
+    // Save references to toggle them later
+    group.bulbMaterial = lightMaterial;
+    group.spotLight = light;
+    group.userData.isRunning = false;
 }
+
 
 function createFan(group) {
     const canopyMaterial = new THREE.MeshStandardMaterial({ color: 0xd4a574 });

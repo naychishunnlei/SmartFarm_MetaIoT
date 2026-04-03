@@ -44,6 +44,9 @@ export const getObjectsForFarm = (farmId) => request(`/farms/${farmId}/objects`,
 export const deleteObject = (farmId, objectId) => request(`/farms/${farmId}/objects/${objectId}`, 'DELETE')
 export const deleteAllObjects = (farmId) => request(`/farms/${farmId}/objects`, 'DELETE')
 export const updateObjectGrowth = (farmId, objectId, growth) => request(`/farms/${farmId}/objects/${objectId}/growth`, 'PUT', { growth })
+export const toggleDevice = (farmId, objectId, is_running) => request(`/farms/${farmId}/objects/${objectId}/toggle`, 'PUT', { is_running })
+export const updateSensorValue = (farmId, objectId, sensor_value) => request(`/farms/${farmId}/objects/${objectId}/sensor`, 'PUT', { sensor_value })
+
 
 export const getFarmsForUser = () => request('/farms', 'GET')
 export const getOrCreateFarm = (farmData) => request('/farms', 'POST', farmData)

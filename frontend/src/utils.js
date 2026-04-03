@@ -1,6 +1,6 @@
 // THREE is loaded globally
 import { createObject as createObjectMesh } from "./objects"
-import { createObject, deleteObject, deleteAllObjects } from "./apiService"
+import { createObject, deleteObject, deleteAllObjects, toggleDevice } from "./apiService"
 
 
 export function setupEventListeners(context) {
@@ -51,39 +51,58 @@ export function setupEventListeners(context) {
     }
 
     // Toggle handler function
-    function handleToggleClick() {
+    async function handleToggleClick() {
         if (contextMenuTarget) {
             const objectType = contextMenuTarget.userData.type;
-            const toggleableTypes = ['sprinkler', 'waterPump', 'fan'];
+            const toggleableTypes = ['sprinkler', 'waterPump', 'fan', 'streetLight'];
             
             if (toggleableTypes.includes(objectType)) {
-                // Toggle running state
-                contextMenuTarget.userData.isRunning = !contextMenuTarget.userData.isRunning;
+                const newState = !contextMenuTarget.userData.isRunning;
                 
-                // Show/hide water effect for sprinkler
-                if (objectType === 'sprinkler' && contextMenuTarget.waterEffect) {
-                    contextMenuTarget.waterEffect.visible = contextMenuTarget.userData.isRunning;
+                try {
+                    // Update database if it has a dbId
+                    if (contextMenuTarget.userData.dbId) {
+                        const farmId = localStorage.getItem('selectedFarmId');
+                        await toggleDevice(farmId, contextMenuTarget.userData.dbId, newState);
+                    }
+
+                    // Toggle running state in 3D object
+                    contextMenuTarget.userData.isRunning = newState;
                     
-                    // Reset water particles when turning off
-                    if (!contextMenuTarget.userData.isRunning) {
-                        const waterEffect = contextMenuTarget.waterEffect;
-                        const lifetimes = waterEffect.lifetimes;
-                        for (let i = 0; i < lifetimes.length; i++) {
-                            lifetimes[i] = waterEffect.maxLifetime + 1;
+                    // Show/hide water effect for sprinkler
+                    if (objectType === 'sprinkler' && contextMenuTarget.waterEffect) {
+                        contextMenuTarget.waterEffect.visible = contextMenuTarget.userData.isRunning;
+                        
+                        // Reset water particles when turning off
+                        if (!contextMenuTarget.userData.isRunning) {
+                            const waterEffect = contextMenuTarget.waterEffect;
+                            const lifetimes = waterEffect.lifetimes;
+                            for (let i = 0; i < lifetimes.length; i++) {
+                                lifetimes[i] = waterEffect.maxLifetime + 1;
+                            }
                         }
                     }
+                    
+                    // Save state
+                    saveObjects()
+
+                    const targetToRefresh = contextMenuTarget
+
+                    const menu = document.getElementById('context-menu');
+                    const currentLeft = menu.style.left;
+                    const currentTop = menu.style.top;
+                    
+                    // Close menu and reopen to refresh UI
+                    hideContextMenu();
+                    showContextMenu(
+                        currentLeft,
+                        currentTop,
+                        targetToRefresh
+                    );
+                } catch (error) {
+                    console.error('Failed to toggle device:', error);
+                    alert(`Error toggling device: ${error.message}`);
                 }
-                
-                // Save state
-                saveObjects();
-                
-                // Close menu and reopen to refresh UI
-                hideContextMenu();
-                showContextMenu(
-                    document.getElementById('context-menu').style.left,
-                    document.getElementById('context-menu').style.top,
-                    contextMenuTarget
-                );
             }
         }
     }
@@ -128,11 +147,9 @@ export function setupEventListeners(context) {
         const farmId = localStorage.getItem('selectedFarmId');
         
         try {
-            // Single API call to wipe the database for this farm
             await deleteAllObjects(farmId);
             console.log('All objects deleted from database.');
 
-            // Clear the 3D scene
             objects.forEach(obj => {
                 scene.remove(obj);
             });
@@ -144,6 +161,7 @@ export function setupEventListeners(context) {
             alert(`Error clearing objects: ${error.message}`);
         }
     }
+
     function showContextMenu(x, y, targetObject) {
         contextMenuTarget = targetObject;
         const contextMenu = document.getElementById('context-menu');
@@ -151,39 +169,79 @@ export function setupEventListeners(context) {
 
         const objectName = targetObject.userData.name || targetObject.userData.type;
         const objectType = targetObject.userData.type;
+        const category = targetObject.userData.category;
 
-        const nameElement = document.getElementById('context-object-name')
-        const statusElement = document.getElementById('context-status-value')
-        const toggleBtn = document.getElementById('context-toggle-btn')
+        const nameElement = document.getElementById('context-object-name');
+        const statusLabel = document.getElementById('context-status-label');
+        const statusElement = document.getElementById('context-status-value');
+        const toggleBtn = document.getElementById('context-toggle-btn');
 
         if (nameElement) nameElement.textContent = objectName;
 
-        if (toggleBtn) {
-            const toggleableTypes = ['sprinkler', 'waterPump', 'fan']
-            if (toggleableTypes.includes(objectType)) {
-                toggleBtn.style.display = 'block'
-                const isRunning = targetObject.userData.isRunning || false
-                toggleBtn.textContent = isRunning ? 'Turn Off' : 'Turn On'
-                toggleBtn.classList.toggle('active', isRunning)
+        const sensors = ['moistureSensor', 'tempSensor', 'humiditySensor'];
+        const actuators = ['sprinkler', 'waterPump', 'fan', 'streetLight'];
+
+        // 1. Handle IoT Sensors
+        if (category === 'iot' && sensors.includes(objectType)) {
+            if (toggleBtn) toggleBtn.style.display = 'none';
+            
+            let unit = '%';
+            let label = 'Value:';
+            if (objectType === 'tempSensor') { unit = '°C'; label = 'Temp:'; }
+            else if (objectType === 'moistureSensor') label = 'Moisture:';
+            else if (objectType === 'humiditySensor') label = 'Humidity:';
+            
+            const val = targetObject.userData.sensorValue || 0;
+            
+            if (statusLabel) statusLabel.textContent = label;
+            if (statusElement) {
+                statusElement.textContent = `${val}${unit}`;
+                statusElement.style.color = '#2196F3';
+            }
+        } 
+        // 2. Handle IoT Actuators
+        else if (category === 'iot' && actuators.includes(objectType)) {
+            if (statusLabel) statusLabel.textContent = 'State:';
+            
+            if (toggleBtn) {
+                toggleBtn.style.display = 'block';
+                const isRunning = targetObject.userData.isRunning || false;
+                toggleBtn.textContent = isRunning ? 'Turn Off' : 'Turn On';
+                toggleBtn.classList.toggle('active', isRunning);
 
                 if (statusElement) {
-                    statusElement.textContent = isRunning ? 'Running' : 'Off'
-                    statusElement.style.color = isRunning ? '#4caf50' : '#999'
+                    statusElement.textContent = isRunning ? 'Running' : 'Off';
+                    statusElement.style.color = isRunning ? '#4caf50' : '#f44336';
                 }
 
-                // Remove old listeners and add fresh one
                 toggleBtn.onclick = null;
                 toggleBtn.removeEventListener('click', handleToggleClick);
                 toggleBtn.addEventListener('click', handleToggleClick);
-            } else {
-                toggleBtn.style.display = 'none'
-                if (statusElement) {
-                    statusElement.textContent = 'In Farm'
-                    statusElement.style.color = '#666';
-                }
+            }
+        } 
+        // 3. Handle Crops
+        else if (category === 'crops') {
+            if (toggleBtn) toggleBtn.style.display = 'none';
+            if (statusLabel) statusLabel.textContent = 'Growth:';
+            
+            if (statusElement) {
+                const percent = Math.round((targetObject.userData.growth || 0) * 100);
+                statusElement.textContent = `${percent}%`;
+                statusElement.style.color = percent >= 100 ? '#4caf50' : '#ff9800';
+            }
+        } 
+        // 4. Handle Default Objects (Fences, Paths, etc.)
+        else {
+            if (toggleBtn) toggleBtn.style.display = 'none';
+            if (statusLabel) statusLabel.textContent = 'Status:';
+            
+            if (statusElement) {
+                statusElement.textContent = 'In Farm';
+                statusElement.style.color = '#666';
             }
         }
 
+        // Positioning
         contextMenu.style.left = `${x}px`;
         contextMenu.style.top = `${y}px`;
         contextMenu.classList.add('show');
@@ -246,6 +304,15 @@ export function setupEventListeners(context) {
 
                 if (Math.abs(point.x) < 40 && Math.abs(point.z) < 40) {
                     const farmId = localStorage.getItem('selectedFarmId')
+                    const category = objectConfigs[selectedObjectType]?.category || 'unknown';
+
+                    const metadata = {};
+                    if (category === 'iot') {
+                        metadata.is_running = false;
+                        metadata.sensor_value = 0; 
+                    } else if (category === 'crops') {
+                        metadata.growth = 0.4;
+                    }
 
                     const objectData = { 
                         object_name: selectedObjectType,
@@ -253,7 +320,8 @@ export function setupEventListeners(context) {
                         position_x: point.x,
                         position_y: point.y,
                         position_z: point.z,
-                     };
+                        metadata: metadata
+                     }
 
                     createObject(farmId, objectData)
                         .then(newDbObject => {
@@ -429,17 +497,25 @@ export function addObject(scene, objectsRef, type, position, dbData = null, obje
 
     obj.userData.growth = 0.4
     
-    if (dbData) {
+    if (dbData && dbData.metadata) {
         obj.userData.dbId = dbData.id;
-        obj.userData.isRunning = dbData.is_running || false;
-        if (dbData.growth !== undefined) {
-            obj.userData.growth = parseFloat(dbData.growth)
-        }
+        obj.userData.isRunning = dbData.metadata.is_running || false;
+        
+        obj.userData.growth = (dbData.metadata.growth !== undefined && dbData.metadata.growth !== null) 
+            ? parseFloat(dbData.metadata.growth) 
+            : 0.4;
+
+        obj.userData.sensorValue = (dbData.metadata.sensor_value !== undefined && dbData.metadata.sensor_value !== null)
+            ? parseFloat(dbData.metadata.sensor_value)
+            : 0.0;
+    } else {
+        obj.userData.growth = 0.4;
+        obj.userData.isRunning = false;
     }
     
-    // Initial scaling for crops
     if (category === 'crops') {
         const g = Math.max(0.4, Math.min(obj.userData.growth, 1.0))
+        obj.userData.growth = g
         obj.scale.set(g, g, g)
     }
     
@@ -457,6 +533,16 @@ export function loadObjects(scene, objects, createObject) {
             data.forEach(item => {
                 const position = new THREE.Vector3(item.position.x, item.position.y, item.position.z);
                 const obj = createObject(item.type, position);
+
+                if (item.growth !== undefined) {
+                    obj.userData.growth = parseFloat(item.growth);
+                    
+                    const cropTypes = ['tomato', 'carrot', 'corn', 'wheat', 'sunflower', 'cabbage'];
+                    if (cropTypes.includes(item.type)) {
+                        const g = Math.max(0.4, Math.min(obj.userData.growth, 1.0));
+                        obj.scale.set(g, g, g);
+                    }
+                }
 
                 if (item.isRunning) {
                     obj.userData.isRunning = true;

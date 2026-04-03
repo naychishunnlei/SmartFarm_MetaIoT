@@ -14,7 +14,9 @@ let ambientLight;
 let sunLight;
 let hemiLight;
 let fillLight;
-let isNightMode = false;
+let isNightMode = false
+let streetLightPointLights = []
+let streetLightMaterial = null
 let selectedObjectType = null;
 let deleteMode = false;
 let raycaster, mouse;
@@ -48,6 +50,7 @@ const objectConfigs = {
     waterPump: { name: 'Water Pump', emoji: '⛽', category: 'iot' },
     sprinkler: { name: 'Sprinkler', emoji: '🚿', category: 'iot' },
     fan: { name: 'Fan', emoji: '🌀', category: 'iot' },
+    streetLight: {name: 'Street Light', emoji: '💡', category: 'iot'},
     // Animals
     chicken: { name: 'Chicken', emoji: '🐔', category: 'animals' },
     cow: { name: 'Cow', emoji: '🐄', category: 'animals' },
@@ -256,7 +259,9 @@ function createEnvironment() {
     createSoilRows();
 
     // Add decorative elements
-    createFarmFence();
+    createFarmFence()
+    createStreetLights()
+    createIrrigationSystem()
     // createDecorations();
 }
 
@@ -330,6 +335,114 @@ function createFarmFence() {
     }
 }
 
+function createStreetLights() {
+    const metalMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7, metalness: 0.8 });
+    
+    const lightMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xffffaa, 
+        emissive: 0xfff0aa, 
+        emissiveIntensity: isNightMode ? 2 : 0 
+    });
+
+   
+    streetLightPointLights = [];
+
+    const positions = [
+    //    { x: -9 - Math.random(), z: -9 - Math.random() }, // Top-Left
+        // { x:  9 + Math.random(), z: -9 - Math.random() }, // Top-Right
+        { x: -9 - Math.random() ,z:  10 + Math.random() }, // Bottom-Left
+        // { x:  9 + Math.random(), z:  9 + Math.random() }  // Bottom-Right
+    
+    ];
+
+    positions.forEach(pos => {
+        const group = new THREE.Group();
+        group.position.set(pos.x, 0, pos.z);
+        
+        group.lookAt(0, 0, 0);
+        group.rotateY(-Math.PI / 2);
+
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 4, 8), metalMaterial);
+        pole.position.y = 2;
+        pole.castShadow = true;
+        group.add(pole);
+
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.2, 8), metalMaterial);
+        arm.rotation.z = Math.PI / 2;
+        arm.position.set(0.5, 3.8, 0); 
+        group.add(arm);
+
+        const lamp = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.3, 8), metalMaterial);
+        lamp.position.set(1.0, 3.7, 0);
+        group.add(lamp);
+
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), lightMaterial);
+        bulb.position.set(1.0, 3.65, 0);
+        group.add(bulb);
+
+        // INCREASED TO 1000, DISTANCE 0 (infinite reach, dims naturally)
+        const light = new THREE.SpotLight(0xfff0aa, isNightMode ? 1000 : 0);
+        light.position.set(1.0, 3.5, 0);
+        light.angle = Math.PI / 2.5; 
+        light.penumbra = 0.5;
+        light.decay = 0.4;
+        light.distance = 0; 
+        light.castShadow = false;
+
+        const targetObject = new THREE.Object3D();
+        targetObject.position.set(20, -2, 0); 
+        group.add(targetObject);
+        light.target = targetObject;
+        
+        group.add(light);
+        streetLightPointLights.push(light); 
+
+
+        scene.add(group);
+    });
+}
+function createIrrigationSystem() {
+    const tankMaterial = new THREE.MeshStandardMaterial({ color: 0x2196F3, roughness: 0.3, metalness: 0.2 });
+    const pipeMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.5 });
+    const supportMaterial = new THREE.MeshStandardMaterial({ color: 0x757575, roughness: 0.8 });
+
+    const group = new THREE.Group();
+    // Place slightly outside the farm soil bed
+    group.position.set(-10.5, 0, 0.5); 
+
+    // Tank Platform Support
+    const support = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.5, 2.2), supportMaterial);
+    support.position.y = 0.75;
+    support.castShadow = true;
+    group.add(support);
+
+    // Large Blue Water Tank
+    const tank = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 2.5, 16), tankMaterial);
+    tank.position.y = 2.75;
+    tank.castShadow = true;
+    group.add(tank);
+
+    // Main Pipe coming down from tank
+    const mainPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.5, 8), pipeMaterial);
+    mainPipe.position.set(1.1, 0.75, 0);
+    group.add(mainPipe);
+
+    // Pipe bringing water to the soil area
+    const horizPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.9, 8), pipeMaterial);
+    horizPipe.rotation.z = Math.PI / 2;
+    horizPipe.position.set(2.05, -0.05, 0);
+    group.add(horizPipe);
+
+    // Distribution pipe running parallel across the edge of the soil bed
+    const distPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 14, 8), pipeMaterial);
+    distPipe.rotation.x = Math.PI / 2;
+    distPipe.position.set(3.0, -0.002, 0);
+    group.add(distPipe);
+
+    scene.add(group);
+}
+
+
 function createSkyTexture(THREE, night) {
     const canvas = document.createElement('canvas');
     canvas.width = 2;
@@ -370,6 +483,10 @@ function applyDayNightLighting(night) {
         fillLight.color.setHex(0x6a8cc8);
         fillLight.intensity = 0.32;
         renderer.toneMappingExposure = 0.78;
+
+        //turn on
+        if (streetLightMaterial) streetLightMaterial.emissiveIntensity = 2;
+        streetLightPointLights.forEach(light => light.intensity = 10)
     } else {
         ambientLight.color.setHex(0xffffff);
         ambientLight.intensity = 0.7;
@@ -381,6 +498,10 @@ function applyDayNightLighting(night) {
         fillLight.color.setHex(0xfff5e6);
         fillLight.intensity = 0.5;
         renderer.toneMappingExposure = 1.2;
+
+        //turn off
+        if (streetLightMaterial) streetLightMaterial.emissiveIntensity = 0;
+        streetLightPointLights.forEach(light => light.intensity = 0);
     }
 }
 
@@ -448,19 +569,16 @@ function setupLighting() {
 function animate() {
     requestAnimationFrame(animate)
 
-    // --- WASD Movement Logic ---
     if (keys.w || keys.a || keys.s || keys.d) {
-        const moveSpeed = 0.3; // Adjust speed as needed
+        const moveSpeed = 0.2; 
         const front = new THREE.Vector3();
         const right = new THREE.Vector3();
         const direction = new THREE.Vector3();
 
-        // Get where the camera is looking
         camera.getWorldDirection(front);
-        front.y = 0; // Lock movement purely to the horizontal XZ plane
+        front.y = 0; 
         front.normalize();
 
-        // Get the right-facing direction
         right.crossVectors(front, camera.up).normalize();
 
         if (keys.w) direction.add(front);
@@ -505,6 +623,17 @@ function animate() {
         // Rotate fan blades when running
         if (obj.userData.type === 'fan' && obj.userData.isRunning && obj.fanBlades) {
             obj.fanBlades.rotation.y += 0.1; // Rotation speed
+        }
+
+        //toggle user-placed streetLight
+        if (obj.userData.type === 'streetLight') {
+            if (isNightMode) {
+                if (obj.bulbMaterial) obj.bulbMaterial.emissiveIntensity = 2;
+                if (obj.spotLight) obj.spotLight.intensity = 10;
+            } else {
+                if (obj.bulbMaterial) obj.bulbMaterial.emissiveIntensity = 0;
+                if (obj.spotLight) obj.spotLight.intensity = 0;
+            }
         }
     })
 

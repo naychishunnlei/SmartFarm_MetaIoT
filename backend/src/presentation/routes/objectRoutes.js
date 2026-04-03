@@ -10,5 +10,7 @@ router.get('/', objectController.getAllForFarm)
 router.delete('/:objectId', objectController.delete)
 router.delete('/', objectController.deleteAll)
 router.put('/:objectId/growth', objectController.updateGrowth)
+router.put('/:objectId/toggle', objectController.toggleDevice)
+router.put('/:objectId/sensor', objectController.updateSensor)
 
 export default router

@@ -58,6 +58,22 @@ class ObjectService {
         }
         return await objectRepository.updateGrowth(objectId, growth)
     }
+
+    async toggleDevice(userId, farmId, objectId, isRunning) {
+        const farm = await farmRepository.findById(farmId)
+        if (!farm || farm.user_id !== userId) {
+            throw new Error('forbidden: do not belong to this farm')
+        }
+        return await objectRepository.updateIsRunning(objectId, isRunning)
+    }
+
+    async updateSensorData(userId, farmId, objectId, value) {
+        const farm = await farmRepository.findById(farmId)
+        if (!farm || farm.user_id !== userId) {
+            throw new Error('forbidden: do not belong to this farm')
+        }
+        return await objectRepository.updateSensorValue(objectId, value)
+    }
 }
 
 export default new ObjectService()
