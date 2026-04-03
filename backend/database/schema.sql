@@ -31,6 +31,11 @@ CREATE TABLE objects (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+--Please try to run these sql in the command before u start
+-- ALTER TABLE objects ADD COLUMN growth NUMERIC DEFAULT 0.4;
+-- ALTER TABLE objects ADD COLUMN metadata JSONB DEFAULT '{}'::jsonb;
+
+
 -- Indexes for better performance
 CREATE INDEX idx_farms_user_id ON farms(user_id);
 CREATE INDEX idx_objects_farm_id ON objects(farm_id);
