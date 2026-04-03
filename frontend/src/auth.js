@@ -14,11 +14,6 @@ export async function handleRegister(name, email, password) {
     }
 }
 
-/**
- * Handles the user login form submission.
- * @param {string} email
- * @param {string} password
- */
 export async function handleLogin(email, password) {
     try {
         const response = await loginUser({ email, password });

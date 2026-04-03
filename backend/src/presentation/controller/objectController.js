@@ -145,6 +145,29 @@ class ObjectController {
         }
     }
 
+    async updatePosition(req, res) {
+        try {
+            const userId = req.user.userId
+            const farmId = parseInt(req.params.farmId, 10)
+            const objectId = parseInt(req.params.objectId, 10)
+            const { position_x, position_y, position_z } = req.body
+
+            if (position_x === undefined || position_y === undefined || position_z === undefined) {
+                return res.status(400).json({ message: 'position_x, position_y, and position_z are required' })
+            }
+
+            const updatedObject = await objectService.updateObjectPosition(userId, farmId, objectId, position_x, position_y, position_z)
+            if (!updatedObject) return res.status(404).json({ message: 'Object not found' })
+            
+            res.status(200).json(updatedObject)
+        } catch (error) {
+            if (error.message.startsWith('Forbidden')) {
+                return res.status(403).json({ message: error.message })
+            }
+            res.status(400).json({ message: error.message })
+        }
+    }
+
 }
 
 export default new ObjectController()

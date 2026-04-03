@@ -1,6 +1,5 @@
-// THREE is loaded globally
 import { createObject as createObjectMesh } from "./objects"
-import { createObject, deleteObject, deleteAllObjects, toggleDevice } from "./apiService"
+import { createObject, deleteObject, deleteAllObjects, toggleDevice, updateObjectPosition } from "./apiService"
 
 
 export function setupEventListeners(context) {
@@ -181,7 +180,7 @@ export function setupEventListeners(context) {
         const sensors = ['moistureSensor', 'tempSensor', 'humiditySensor'];
         const actuators = ['sprinkler', 'waterPump', 'fan', 'streetLight'];
 
-        // 1. Handle IoT Sensors
+        //Handle IoT Sensors
         if (category === 'iot' && sensors.includes(objectType)) {
             if (toggleBtn) toggleBtn.style.display = 'none';
             
@@ -199,7 +198,7 @@ export function setupEventListeners(context) {
                 statusElement.style.color = '#2196F3';
             }
         } 
-        // 2. Handle IoT Actuators
+        // Handle IoT Actuators
         else if (category === 'iot' && actuators.includes(objectType)) {
             if (statusLabel) statusLabel.textContent = 'State:';
             
@@ -219,7 +218,7 @@ export function setupEventListeners(context) {
                 toggleBtn.addEventListener('click', handleToggleClick);
             }
         } 
-        // 3. Handle Crops
+        //Handle Crops
         else if (category === 'crops') {
             if (toggleBtn) toggleBtn.style.display = 'none';
             if (statusLabel) statusLabel.textContent = 'Growth:';
@@ -230,7 +229,7 @@ export function setupEventListeners(context) {
                 statusElement.style.color = percent >= 100 ? '#4caf50' : '#ff9800';
             }
         } 
-        // 4. Handle Default Objects (Fences, Paths, etc.)
+        // Handle Default Objects 
         else {
             if (toggleBtn) toggleBtn.style.display = 'none';
             if (statusLabel) statusLabel.textContent = 'Status:';
@@ -295,12 +294,25 @@ export function setupEventListeners(context) {
                 }
             }
         } else if (selectedObjectType) {
-            const intersects = raycaster.intersectObject(ground);
+            //allow fan to be placed on existing objs
+            let intersectTargets = [ground];
+            if (selectedObjectType === 'fan') {
+                intersectTargets = [ground, ...objects];
+            }
+
+            const intersects = raycaster.intersectObjects(intersectTargets, true);
             if (intersects.length > 0) {
-                const point = intersects[0].point.clone();
+                const intersection = intersects[0]
+                const point = intersection.point.clone()
                 point.x = Math.round(point.x * 2) / 2;
                 point.z = Math.round(point.z * 2) / 2;
-                point.y = 0;
+               
+
+                if (selectedObjectType !== 'fan') {
+                    point.y = 0;
+                } else {
+                    point.y = intersection.point.y + 0.05
+                }
 
                 if (Math.abs(point.x) < 40 && Math.abs(point.z) < 40) {
                     const farmId = localStorage.getItem('selectedFarmId')
@@ -329,7 +341,6 @@ export function setupEventListeners(context) {
                             
                             addObject(scene, objectsRef, newDbObject.object_name, point, newDbObject, objectConfigs);
                             
-                            // Update UI after adding
                             updateObjectCount();
                             deselectAllObjects();
                         })
@@ -389,8 +400,8 @@ export function setupEventListeners(context) {
         }
     }
 
-    // ===== Event Listener Setup =====
 
+    // ===== Event Listener Setup =====
     window.addEventListener('resize', onWindowResize);
     renderer.domElement.addEventListener('click', onCanvasClick);
     renderer.domElement.addEventListener('contextmenu', onCanvasRightClick);
@@ -485,6 +496,54 @@ export function setupEventListeners(context) {
             hideContextMenu();
         }
     });
+
+
+
+    window.addEventListener('keydown', async (e) => {
+        if (e.target.tagName === 'INPUT') return;
+
+        if (contextMenuTarget) {
+            const step = 0.2; 
+            let moved = false;
+
+             // SHIFT + arrow to move UP and DOWN (Y-axis for height)
+            if (e.shiftKey) {
+                if (e.key === 'ArrowUp') { contextMenuTarget.position.y += step; moved = true; }
+                if (e.key === 'ArrowDown') { contextMenuTarget.position.y -= step; moved = true; }
+            } 
+            // arrows move along the ground X & Z
+            else {
+                if (e.key === 'ArrowUp') { contextMenuTarget.position.z -= step; moved = true; }
+                if (e.key === 'ArrowDown') { contextMenuTarget.position.z += step; moved = true; }
+                if (e.key === 'ArrowLeft') { contextMenuTarget.position.x -= step; moved = true; }
+                if (e.key === 'ArrowRight') { contextMenuTarget.position.x += step; moved = true; }
+            }
+
+            // Prevent screen scrolling when using arrow keys
+            if (moved) {
+                e.preventDefault(); 
+            }
+
+            if (e.key === 'Enter') {
+                const farmId = localStorage.getItem('selectedFarmId');
+                const dbId = contextMenuTarget.userData.dbId;
+                
+                try {
+                    await updateObjectPosition(farmId, dbId, {
+                        position_x: contextMenuTarget.position.x,
+                        position_y: contextMenuTarget.position.y,
+                        position_z: contextMenuTarget.position.z
+                    });
+                    
+                    console.log('Object moved and saved!');
+                    saveObjects()
+
+                } catch (error) {
+                    console.error('Error saving new position:', error);
+                }
+            }
+        }
+    });
 }
 
 export function addObject(scene, objectsRef, type, position, dbData = null, objectConfigs = null) {
@@ -525,43 +584,43 @@ export function addObject(scene, objectsRef, type, position, dbData = null, obje
 
 
 
-export function loadObjects(scene, objects, createObject) {
-    const savedData = localStorage.getItem('farmObjects');
-    if (savedData) {
-        try {
-            const data = JSON.parse(savedData);
-            data.forEach(item => {
-                const position = new THREE.Vector3(item.position.x, item.position.y, item.position.z);
-                const obj = createObject(item.type, position);
+// export function loadObjects(scene, objects, createObject) {
+//     const savedData = localStorage.getItem('farmObjects');
+//     if (savedData) {
+//         try {
+//             const data = JSON.parse(savedData);
+//             data.forEach(item => {
+//                 const position = new THREE.Vector3(item.position.x, item.position.y, item.position.z);
+//                 const obj = createObject(item.type, position);
 
-                if (item.growth !== undefined) {
-                    obj.userData.growth = parseFloat(item.growth);
+//                 if (item.growth !== undefined) {
+//                     obj.userData.growth = parseFloat(item.growth);
                     
-                    const cropTypes = ['tomato', 'carrot', 'corn', 'wheat', 'sunflower', 'cabbage'];
-                    if (cropTypes.includes(item.type)) {
-                        const g = Math.max(0.4, Math.min(obj.userData.growth, 1.0));
-                        obj.scale.set(g, g, g);
-                    }
-                }
+//                     const cropTypes = ['tomato', 'carrot', 'corn', 'wheat', 'sunflower', 'cabbage'];
+//                     if (cropTypes.includes(item.type)) {
+//                         const g = Math.max(0.4, Math.min(obj.userData.growth, 1.0));
+//                         obj.scale.set(g, g, g);
+//                     }
+//                 }
 
-                if (item.isRunning) {
-                    obj.userData.isRunning = true;
+//                 if (item.isRunning) {
+//                     obj.userData.isRunning = true;
                     
-                    if (obj.userData.type === 'sprinkler' && obj.waterEffect) {
-                        obj.waterEffect.visible = true;
-                    }
+//                     if (obj.userData.type === 'sprinkler' && obj.waterEffect) {
+//                         obj.waterEffect.visible = true;
+//                     }
                     
-                    if (obj.userData.type === 'fan' && obj.fanBlades) {
-                        // Fan will start rotating automatically in animate loop
-                    }
-                }
-                scene.add(obj);
-                objects.push(obj);
-            });
-            const countElement = document.getElementById('object-count');
-            if (countElement) countElement.textContent = objects.length;
-        } catch (e) {
-            console.error('Error loading saved objects:', e);
-        }
-    }
-}
+//                     if (obj.userData.type === 'fan' && obj.fanBlades) {
+//                         // Fan will start rotating automatically in animate loop
+//                     }
+//                 }
+//                 scene.add(obj);
+//                 objects.push(obj);
+//             });
+//             const countElement = document.getElementById('object-count');
+//             if (countElement) countElement.textContent = objects.length;
+//         } catch (e) {
+//             console.error('Error loading saved objects:', e);
+//         }
+//     }
+// }

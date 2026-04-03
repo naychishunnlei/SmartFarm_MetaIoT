@@ -132,6 +132,7 @@ export async function init() {
     try {
         const farmObjects = await getObjectsForFarm(farmId)
         console.log('loading objs from db')
+        objects.length = 0
         farmObjects.forEach(dbObject => {
             const position = new THREE.Vector3(
                 parseFloat(dbObject.position_x), 
@@ -199,7 +200,7 @@ function setupCameraView() {
 
         switch(e.key) {
             case '1': // Drone View (Default Isometric)
-                camera.position.set(15, 12, 15);
+                camera.position.set(0, 12, 18);
                 controls.target.set(0, 0, 0);
                 controls.minDistance = 8;
                 controls.maxDistance = 35;

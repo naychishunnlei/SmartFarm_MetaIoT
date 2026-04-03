@@ -46,6 +46,7 @@ export const deleteAllObjects = (farmId) => request(`/farms/${farmId}/objects`, 
 export const updateObjectGrowth = (farmId, objectId, growth) => request(`/farms/${farmId}/objects/${objectId}/growth`, 'PUT', { growth })
 export const toggleDevice = (farmId, objectId, is_running) => request(`/farms/${farmId}/objects/${objectId}/toggle`, 'PUT', { is_running })
 export const updateSensorValue = (farmId, objectId, sensor_value) => request(`/farms/${farmId}/objects/${objectId}/sensor`, 'PUT', { sensor_value })
+export const updateObjectPosition = (farmId, objectId, positionData) => request(`/farms/${farmId}/objects/${objectId}/position`, 'PUT', positionData)
 
 
 export const getFarmsForUser = () => request('/farms', 'GET')

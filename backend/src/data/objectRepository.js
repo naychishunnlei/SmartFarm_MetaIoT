@@ -76,6 +76,18 @@ class ObjectRepository {
         const result = await pool.query(query, [value, id])
         return result.rows[0]
     }
+
+    async updatePosition(id, x, y, z) {
+        const query = `
+            UPDATE objects
+            SET position_x = $1, position_y = $2, position_z = $3,
+                updated_at = NOW()
+            WHERE id = $4
+            RETURNING *;
+        `
+        const result = await pool.query(query, [x, y, z, id])
+        return result.rows[0]
+    }
 }
 
 export default new ObjectRepository()

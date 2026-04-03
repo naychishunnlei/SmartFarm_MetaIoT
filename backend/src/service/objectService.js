@@ -20,7 +20,6 @@ class ObjectService {
     }
 
      async deleteObject(userId, farmId, objectId) {
-        // Security Check 1: Verify the user owns the farm.
         const farm = await farmRepository.findById(farmId);
         if (!farm) {
             throw new Error('Farm not found.');
@@ -28,14 +27,11 @@ class ObjectService {
         if (farm.user_id !== userId) {
             throw new Error('Forbidden: You do not have permission on this farm.');
         }
-
-        // Security Check 2: Verify the object exists and belongs to this farm.
         const object = await objectRepository.findById(objectId);
         if (!object || object.farm_id !== farmId) {
             throw new Error('Object not found on this farm.');
         }
 
-        // If all checks pass, delete the object.
         const deleted = await objectRepository.delete(objectId);
         if (!deleted) {
             throw new Error('Failed to delete the object.');
@@ -73,6 +69,14 @@ class ObjectService {
             throw new Error('forbidden: do not belong to this farm')
         }
         return await objectRepository.updateSensorValue(objectId, value)
+    }
+
+    async updateObjectPosition(userId, farmId, objectId, x, y, z) {
+        const farm = await farmRepository.findById(farmId)
+        if (!farm || farm.user_id !== userId) {
+            throw new Error('Forbidden: You do not have permission on this farm.');
+        }
+        return await objectRepository.updatePosition(objectId, x, y, z)
     }
 }
 

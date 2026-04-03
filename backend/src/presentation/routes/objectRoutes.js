@@ -12,5 +12,7 @@ router.delete('/', objectController.deleteAll)
 router.put('/:objectId/growth', objectController.updateGrowth)
 router.put('/:objectId/toggle', objectController.toggleDevice)
 router.put('/:objectId/sensor', objectController.updateSensor)
+router.put('/:objectId/position', objectController.updatePosition)
+
 
 export default router
