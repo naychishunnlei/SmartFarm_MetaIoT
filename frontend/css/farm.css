@@ -309,6 +309,211 @@ canvas {
     top: 100px;
 }
 
+.zone-dashboard {
+    position: absolute;
+    right: 24px;
+    top: 100px;
+    width: min(360px, calc(100vw - 48px));
+    max-height: calc(100vh - 150px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(22, 32, 28, 0.84) 0%, rgba(35, 49, 41, 0.78) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    color: #f5f7f2;
+    overflow: hidden;
+}
+
+.zone-dashboard-header h2 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    margin-top: 2px;
+}
+
+.zone-dashboard-kicker {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(196, 224, 198, 0.8);
+}
+
+.zone-dashboard-header p {
+    margin-top: 6px;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    color: rgba(234, 240, 232, 0.75);
+}
+
+.zone-dashboard-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.dashboard-metric {
+    padding: 12px 10px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    text-align: center;
+}
+
+.metric-value {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #f5f7f2;
+}
+
+.metric-label {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(234, 240, 232, 0.72);
+}
+
+.zone-dashboard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.zone-dashboard-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.zone-dashboard-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+}
+
+.zone-dashboard-list::-webkit-scrollbar-thumb {
+    background: rgba(194, 225, 194, 0.35);
+    border-radius: 999px;
+}
+
+.zone-card {
+    padding: 14px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.zone-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.zone-card-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 0.96rem;
+}
+
+.zone-card-subtitle {
+    margin-top: 4px;
+    font-size: 0.76rem;
+    color: rgba(234, 240, 232, 0.68);
+}
+
+.zone-status-pill {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.08);
+    color: #f5f7f2;
+}
+
+.zone-status-pill.healthy {
+    background: rgba(76, 175, 80, 0.18);
+    color: #bfe8c1;
+}
+
+.zone-status-pill.active {
+    background: rgba(33, 150, 243, 0.18);
+    color: #bbdefb;
+}
+
+.zone-status-pill.attention {
+    background: rgba(255, 152, 0, 0.2);
+    color: #ffd59f;
+}
+
+.zone-status-pill.idle {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(234, 240, 232, 0.72);
+}
+
+.zone-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.zone-stat {
+    padding: 10px 10px 11px;
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.14);
+}
+
+.zone-stat-label {
+    display: block;
+    font-size: 0.64rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(234, 240, 232, 0.62);
+}
+
+.zone-stat-value {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.zone-alerts {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(240, 246, 239, 0.85);
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+.zone-alerts strong {
+    color: #fff;
+}
+
+.zone-empty {
+    padding: 16px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(234, 240, 232, 0.72);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
 .add-items-btn {
     display: flex;
     align-items: center;
@@ -639,6 +844,27 @@ canvas {
 
 .hidden {
     display: none !important;
+}
+
+@media (max-width: 1180px) {
+    .zone-dashboard {
+        width: 320px;
+    }
+}
+
+@media (max-width: 960px) {
+    .zone-dashboard {
+        top: auto;
+        bottom: 86px;
+        right: 16px;
+        left: 16px;
+        width: auto;
+        max-height: 38vh;
+    }
+
+    .farm-stats {
+        display: none;
+    }
 }
 
 /* Instructions */

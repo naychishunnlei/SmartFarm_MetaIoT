@@ -1,11 +1,12 @@
-import express from 'express';
 import cors from 'cors';
-import { createServer } from 'http';
 import dotenv from 'dotenv';
+import express from 'express';
+import { createServer } from 'http';
 import { connectDatabase } from './config/database.js';
-import userRoute from './presentation/routes/userRoute.js'; 
-import objectRoutes from './presentation/routes/objectRoutes.js'
-import farmRoute from './presentation/routes/farmRoute.js'
+import farmRoute from './presentation/routes/farmRoute.js';
+import objectRoutes from './presentation/routes/objectRoutes.js';
+import userRoute from './presentation/routes/userRoute.js';
+import initWebSocket from './presentation/websocketServer.js';
 
 dotenv.config();
 
@@ -26,10 +27,21 @@ app.use(express.json());
 // Connect to Database
 connectDatabase();
 
+// Start WebSocket server for ESP32 sensor stream
+initWebSocket(server);
+
 // API Routes
 app.use('/api/users', userRoute)
 app.use('/api/farms', farmRoute)
 app.use('/api/farms/:farmId/objects', objectRoutes)
+
+// Root route for quick server verification in browser
+app.get('/', (req, res) => {
+    res.json({
+        message: 'SmartFarm backend is running',
+        health: '/api/health'
+    });
+});
 
 // Health Check
 app.get('/api/health', (req, res) => {
