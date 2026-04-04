@@ -19,9 +19,17 @@ CREATE TABLE farms (
     area DECIMAL(10, 2)
 );
 
+-- Zones Table (NEW)
+CREATE TABLE zones (
+    id SERIAL PRIMARY KEY,
+    farm_id INTEGER REFERENCES farms(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL
+);
+
 CREATE TABLE objects (
     id SERIAL PRIMARY KEY,
     farm_id INTEGER NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
+    zone_id INTEGER REFERENCES zones(id) ON DELETE SET NULL,
     object_name VARCHAR(100) NOT NULL, 
     category VARCHAR(100) NOT NULL,   
     position_x NUMERIC(10, 4) NOT NULL,
