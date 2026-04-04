@@ -1,9 +1,6 @@
-// Smart Farm - Core Module
-// Main initialization, scene setup, and event handling
-// THREE, OrbitControls, and GLTFLoader are loaded globally
 import { setupEventListeners, addObject } from './utils.js';
 import { createObject } from './objects.js'
-import { getObjectsForFarm, updateObjectGrowth } from './apiService.js';
+import { getObjectsForFarm, updateObjectGrowth, toggleDevice, updateSensorValue} from './apiService.js';
 
 // Global variables
 let scene, camera, renderer, controls;
@@ -27,6 +24,8 @@ const keys = { w: false, a: false, s: false, d: false }
 //sample sensor data
 let farmSoilMoisture = 0.6
 let farmWaterLevel = 0.8
+let wasLowMoisture = false
+
 // Object configurations
 const objectConfigs = {
     // Crops
@@ -175,16 +174,36 @@ export async function init() {
     // Start animation loop
     animate()
 
-    setInterval(() => {
+    setInterval(async () => {
         if(!farmId) return
 
-        objects.forEach(obj => {
-            if (obj.userData.category === 'crops' && obj.userData.dbId) {
-                if (obj.userData.growth <= 1.0) {
-                    updateObjectGrowth(farmId, obj.userData.dbId, obj.userData.growth)
+        try {
+            const liveDbObjects = await getObjectsForFarm(farmId);
+
+            objects.forEach(obj => {
+                if (obj.userData.category === 'crops' && obj.userData.dbId) {
+                    if (obj.userData.growth <= 1.0) {
+                        updateObjectGrowth(farmId, obj.userData.dbId, obj.userData.growth)
+                    }
                 }
-            }
-        })
+
+                if ((obj.userData.type === 'sprinkler' || obj.userData.type === 'waterPump') && obj.userData.dbId) {
+                    if (obj.userData.isRunning !== obj.userData.db_isRunning) {
+                        toggleDevice(farmId, obj.userData.dbId, obj.userData.isRunning);
+                        obj.userData.db_isRunning = obj.userData.isRunning; 
+                    }
+                }
+
+                if (obj.userData.category === 'iot' && obj.userData.dbId) {
+                    const dbMatch = liveDbObjects.find(dbObj => dbObj.id === obj.userData.dbId);
+                    if (dbMatch && dbMatch.metadata && dbMatch.metadata.sensor_value !== undefined) {
+                        obj.userData.sensorValue = parseFloat(dbMatch.metadata.sensor_value);
+                    }
+                }
+            })
+        } catch (error) {
+            console.error("Failed to sync live sensor data:", error);
+        }
     }, 10000)
 }
 
@@ -192,14 +211,13 @@ export async function init() {
 //setup camera view
 function setupCameraView() {
     window.addEventListener('keydown', (e) => {
-        // Ignore if user is typing in an input field
         if (e.target.tagName === 'INPUT') return
 
         const key = e.key.toLowerCase()
         if (keys.hasOwnProperty(key)) keys[key] = true
 
         switch(e.key) {
-            case '1': // Drone View (Default Isometric)
+            case '1': // Drone View 
                 camera.position.set(0, 12, 18);
                 controls.target.set(0, 0, 0);
                 controls.minDistance = 8;
@@ -589,18 +607,36 @@ function animate() {
 
         direction.normalize().multiplyScalar(moveSpeed);
 
-        // Move both camera and its look target evenly
         camera.position.add(direction);
         controls.target.add(direction);
     }
 
     controls.update()
 
+    if (camera.position.y < 0.5) {
+        camera.position.y = 0.5;
+    }
     //growth rate
     const baseGrowthRate = 0.0003
     const moistureFactor = 1.0 - Math.abs(0.7 - farmSoilMoisture) * 2
     const waterFactor = Math.min(farmWaterLevel, 1.0)
     const effectiveGrowthRate = Math.max(0, baseGrowthRate * moistureFactor * waterFactor)
+
+    //Calculate average moisture from sensors
+    let totalMoisture = 0;
+    let moistureSensorCount = 0;
+    objects.forEach(o => {
+        if (o.userData.type === 'moistureSensor') {
+            totalMoisture += (o.userData.sensorValue || 0);
+            moistureSensorCount++;
+        }
+    });
+    const currentMoisture = moistureSensorCount > 0 ? (totalMoisture / moistureSensorCount) : (farmSoilMoisture * 100);
+    const isLowMoisture = currentMoisture < 30; // Threshold to trigger automation
+
+
+    const justBecameLowMoisture = isLowMoisture && !wasLowMoisture;
+    wasLowMoisture = isLowMoisture;
 
     // Update active sprinkler water particles (when isRunning === true)
     objects.forEach(obj => {
@@ -617,13 +653,21 @@ function animate() {
             }
         }
 
+        // Auto-turn on sprinklers and pumps
+        if ((obj.userData.type === 'sprinkler' || obj.userData.type === 'waterPump') && justBecameLowMoisture) {
+            obj.userData.isRunning = true;
+        }
+
         if (obj.userData.type === 'sprinkler' && obj.userData.isRunning && obj.waterEffect) {
+            obj.waterEffect.visible = true; 
             updateSprinklerWater(obj.waterEffect)
+        } else if (obj.userData.type === 'sprinkler' && !obj.userData.isRunning && obj.waterEffect) {
+            obj.waterEffect.visible = false; 
         }
         
         // Rotate fan blades when running
         if (obj.userData.type === 'fan' && obj.userData.isRunning && obj.fanBlades) {
-            obj.fanBlades.rotation.y += 0.1; // Rotation speed
+            obj.fanBlades.rotation.y += 0.1; 
         }
 
         //toggle user-placed streetLight

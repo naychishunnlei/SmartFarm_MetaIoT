@@ -31,7 +31,18 @@ CREATE TABLE objects (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+
 --Please try to run these sql in the command before u start
+
+-- Historical logging table for dashboard analytics
+-- CREATE TABLE IF NOT EXISTS sensor_logs (
+--     id SERIAL PRIMARY KEY,
+--     object_id INTEGER NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+--     sensor_type VARCHAR(50) NOT NULL, -- e.g., 'moisture', 'temperature', 'growth'
+--     value NUMERIC NOT NULL,
+--     recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- );
+
 -- ALTER TABLE objects ADD COLUMN growth NUMERIC DEFAULT 0.4;
 -- ALTER TABLE objects ADD COLUMN metadata JSONB DEFAULT '{}'::jsonb;
 

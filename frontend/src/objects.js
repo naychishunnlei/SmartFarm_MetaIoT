@@ -1,4 +1,3 @@
-// THREE is loaded globally
 export function createObject(type, position) {
     const group = new THREE.Group();
     // Create a 3D object based on type
