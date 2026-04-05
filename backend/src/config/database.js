@@ -10,7 +10,11 @@ const pool = new Pool ({
     password: process.env.DB_PASSWORD,
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 5432,
-    database: process.env.DB_NAME || 'farmverse'
+    database: process.env.DB_NAME || 'farmverse',
+
+    max: 20, // Maximum number of connections in the pool
+    idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+    connectionTimeoutMillis: 2000, // Fail fast if the DB stops responding
 })
 
 export async function connectDatabase() {
