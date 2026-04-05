@@ -55,8 +55,15 @@ class UserService {
                 id: user.id,
                 name: user.name,
                 email: user.email,
+                avatar_config: user.avatar_config
             },
         }
+    }
+
+    async updateAvatar(userId, avatarConfig) {
+        const updatedUser = await userRepository.updateAvatar(userId, avatarConfig)
+        if (!updatedUser) throw new Error('User not found')
+        return updatedUser
     }
 }
 
