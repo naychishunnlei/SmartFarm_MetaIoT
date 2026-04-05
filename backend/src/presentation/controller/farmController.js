@@ -4,14 +4,13 @@ import farmService from "../../service/farmService.js";
 class FarmController {
     async create(req, res) {
         try {
-            // 1. Grab userId securely from the auth middleware, NOT the request body!
-            //const userId = req.user.userId;
-            const userId = 1;
-            const { name, location, hardware_id } = req.body;
+            // 1. User context
+            const userId = 1; // Secure this via req.user.userId when auth is ready
+            const { name, location, hardware_id, latitude, longitude } = req.body;
 
-            // Basic validation
-            if (!name || !location || !hardware_id) {
-                return res.status(400).json({ error: 'Missing required fields' });
+            // Basic validation including map coordinates
+            if (!name || !location || !hardware_id || latitude === undefined || longitude === undefined) {
+                return res.status(400).json({ error: 'Missing required fields (name, location, hardware_id, or coordinates)' });
             }
 
             const client = await pool.connect();
@@ -19,7 +18,17 @@ class FarmController {
             try {
                 await client.query('BEGIN');
 
-                // Check if the hardware_id is already claimed
+                // 2. Hardware Verification
+                const registryQuery = `SELECT * FROM hardware_registry WHERE hardware_id = $1`;
+                const registryResult = await client.query(registryQuery, [hardware_id]);
+
+                if (registryResult.rowCount === 0) {
+                    throw new Error('Device not found in registry. Please power on your ESP32 first so it can register.');
+                }
+
+                const { zone_count, has_dht, has_light } = registryResult.rows[0];
+
+                // 3. Ownership Check
                 const checkQuery = `SELECT id FROM farms WHERE hardware_id = $1`;
                 const checkResult = await client.query(checkQuery, [hardware_id]);
                 
@@ -27,39 +36,75 @@ class FarmController {
                     throw new Error('This device is already claimed by another user.');
                 }
 
-                // Insert the new farm
+                // 4. Create Farm Entry
                 const insertFarmQuery = `
-                    INSERT INTO farms (user_id, name, location, hardware_id)
-                    VALUES ($1, $2, $3, $4)
+                    INSERT INTO farms (user_id, name, location, hardware_id, latitude, longitude)
+                    VALUES ($1, $2, $3, $4, $5, $6)
                     RETURNING *;
                 `;
-                const farmResult = await client.query(insertFarmQuery, [userId, name, location, hardware_id]);
+                const farmResult = await client.query(insertFarmQuery, [userId, name, location, hardware_id, latitude, longitude]);
                 const newFarm = farmResult.rows[0];
 
-                // Create a default zone for this farm
-                const insertZoneQuery = `
-                    INSERT INTO zones (farm_id, name)
-                    VALUES ($1, $2)
-                    RETURNING *;
-                `;
-                const zoneResult = await client.query(insertZoneQuery, [newFarm.id, 'Main Zone']);
-                const newZone = zoneResult.rows[0];
+                // 5. AUTO-PROVISION: Setup logical zones and physical 3D models
+                const createdZones = [];
+                for (let i = 1; i <= zone_count; i++) {
+                    // Create the database zone
+                    const insertZoneQuery = `
+                        INSERT INTO zones (farm_id, name, local_index)
+                        VALUES ($1, $2, $3)
+                        RETURNING *;
+                    `;
+                    const zoneResult = await client.query(insertZoneQuery, [newFarm.id, `Zone ${i}`, i]);
+                    const newZone = zoneResult.rows[0];
+                    createdZones.push(newZone);
+
+                    // AUTO-RENDER: Add 3D Moisture Probe (Matches 'moistureSensor' in objects.js)
+                    // Columns: farm_id, zone_id, object_name, category, position_x, position_y, position_z
+                    await client.query(
+                        `INSERT INTO objects (farm_id, zone_id, object_name, category, position_x, position_y, position_z) 
+                         VALUES ($1, $2, $3, $4, $5, $6, $7)`, 
+                        [newFarm.id, newZone.id, 'moistureSensor', 'iot', (i * 3) - 3, 0, 0] 
+                    );
+
+                    // AUTO-RENDER: Add 3D Water Pump (Matches 'waterPump' in objects.js)
+                    await client.query(
+                        `INSERT INTO objects (farm_id, zone_id, object_name, category, position_x, position_y, position_z) 
+                         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                        [newFarm.id, newZone.id, 'waterPump', 'iot', (i * 3) - 3, 0, 2]
+                    );
+                }
+
+                // 6. AUTO-RENDER: Global Farm Hardware
+                if (has_dht) {
+                    // Matches 'tempSensor' in objects.js
+                    await client.query(
+                        `INSERT INTO objects (farm_id, object_name, category, position_x, position_y, position_z) 
+                         VALUES ($1, $2, $3, $4, $5, $6)`, 
+                        [newFarm.id, 'tempSensor', 'iot', -4, 0, -4]
+                    );
+                }
+                
+                // Add street light if hardware has it (Matches 'streetLight' in objects.js)
+                if (has_light) {
+                    await client.query(
+                        `INSERT INTO objects (farm_id, object_name, category, position_x, position_y, position_z) 
+                         VALUES ($1, $2, $3, $4, $5, $6)`, 
+                        [newFarm.id, 'streetLight', 'iot', 4, 0, 4]
+                    );
+                }
 
                 await client.query('COMMIT');
 
                 res.status(201).json({
-                    message: 'Farm successfully claimed!',
+                    message: 'Farm successfully claimed and 3D sensors auto-generated!',
                     farm: newFarm,
-                    zone: newZone
+                    zones: createdZones
                 });
 
             } catch (error) {
                 await client.query('ROLLBACK');
-                
-                if (error.message.includes('already claimed')) {
-                    return res.status(409).json({ error: error.message });
-                }
-                throw error; // Pass to outer catch block
+                console.error("Transaction Error:", error.message);
+                res.status(error.message.includes('not found') ? 404 : 400).json({ error: error.message });
             } finally {
                 client.release();
             }
@@ -69,8 +114,6 @@ class FarmController {
             res.status(500).json({ message: 'Internal server error while claiming farm' });
         }
     }
-
-    // --- RESTORED ORIGINAL FUNCTIONS ---
 
     async getOrCreate(req, res) {
         try {
@@ -115,5 +158,4 @@ class FarmController {
     }
 }
 
-// Export the class instance exactly how you had it originally
 export default new FarmController();

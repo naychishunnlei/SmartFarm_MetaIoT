@@ -23,7 +23,8 @@ CREATE TABLE farms (
 CREATE TABLE zones (
     id SERIAL PRIMARY KEY,
     farm_id INTEGER REFERENCES farms(id) ON DELETE CASCADE,
-    name VARCHAR(100) NOT NULL
+    name VARCHAR(100) NOT NULL,
+    local_index INTEGER
 );
 
 CREATE TABLE objects (
@@ -62,6 +63,13 @@ CREATE TABLE zone_sensor_logs (
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE hardware_registry (
+    hardware_id VARCHAR(50) PRIMARY KEY, -- The MAC Address
+    zone_count INTEGER DEFAULT 1,
+    has_dht BOOLEAN DEFAULT TRUE,
+    has_light BOOLEAN DEFAULT FALSE,
+    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Please try to run these sql in the command before u start
 
