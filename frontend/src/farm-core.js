@@ -1,6 +1,5 @@
-import { setupEventListeners, addObject } from './utils.js';
-import { createObject } from './objects.js'
-import { getObjectsForFarm, updateObjectGrowth, toggleDevice, updateSensorValue} from './apiService.js';
+import { getObjectsForFarm, toggleDevice, updateObjectGrowth } from './apiService.js';
+import { addObject, setupEventListeners } from './utils.js';
 
 // Global variables
 let scene, camera, renderer, controls;
@@ -65,6 +64,221 @@ const objectConfigs = {
     rock: { name: 'Rock', emoji: '🪨', category: 'environment' },
     path: { name: 'Path', emoji: '🛤️', category: 'environment' }
 };
+
+function formatSensorValue(type, value) {
+    if (value === undefined || value === null || Number.isNaN(value)) {
+        return '--';
+    }
+
+    if (type === 'tempSensor') {
+        return `${Number(value).toFixed(1)}°C`;
+    }
+
+    const percentValue = Number(value) <= 1 ? Number(value) * 100 : Number(value);
+    return `${percentValue.toFixed(0)}%`;
+}
+
+function getZoneLabelForObject(obj) {
+    const explicitZoneId = obj?.userData?.zoneId ?? obj?.userData?.zone_id ?? obj?.userData?.zoneID;
+    if (explicitZoneId !== undefined && explicitZoneId !== null && explicitZoneId !== '') {
+        return `Zone ${explicitZoneId}`;
+    }
+
+    const x = obj?.position?.x ?? 0;
+    const z = obj?.position?.z ?? 0;
+
+    if (Math.abs(x) <= 4 && Math.abs(z) <= 4) {
+        return 'Central Zone';
+    }
+
+    if (x < 0 && z < 0) return 'Zone A';
+    if (x >= 0 && z < 0) return 'Zone B';
+    if (x < 0 && z >= 0) return 'Zone C';
+    return 'Zone D';
+}
+
+function computeZoneStatus(summary) {
+    if (summary.totalObjects === 0) {
+        return { label: 'Idle', tone: 'idle' };
+    }
+
+    if (summary.alerts.length > 0) {
+        return { label: 'Attention', tone: 'attention' };
+    }
+
+    if (summary.runningDevices > 0 || summary.sensorCount > 0) {
+        return { label: 'Active', tone: 'active' };
+    }
+
+    if (summary.averageGrowth >= 0.75 || summary.crops > 0) {
+        return { label: 'Healthy', tone: 'healthy' };
+    }
+
+    return { label: 'Stable', tone: 'healthy' };
+}
+
+function summarizeZones() {
+    const zoneMap = new Map();
+
+    objects.forEach((obj) => {
+        const zoneLabel = getZoneLabelForObject(obj);
+        if (!zoneMap.has(zoneLabel)) {
+            zoneMap.set(zoneLabel, {
+                label: zoneLabel,
+                totalObjects: 0,
+                crops: 0,
+                sensors: 0,
+                runningDevices: 0,
+                growthTotal: 0,
+                growthSamples: 0,
+                sensorReadings: [],
+                alerts: []
+            });
+        }
+
+        const summary = zoneMap.get(zoneLabel);
+        const category = obj?.userData?.category || 'unknown';
+        const type = obj?.userData?.type || '';
+
+        summary.totalObjects += 1;
+
+        if (category === 'crops') {
+            summary.crops += 1;
+            const growthValue = Number(obj?.userData?.growth ?? 0);
+            summary.growthTotal += growthValue;
+            summary.growthSamples += 1;
+        }
+
+        if (category === 'iot') {
+            summary.sensors += 1;
+            if (type === 'waterPump' || type === 'sprinkler' || type === 'fan' || type === 'streetLight') {
+                if (obj?.userData?.isRunning) {
+                    summary.runningDevices += 1;
+                }
+            }
+
+            if (type === 'moistureSensor' || type === 'tempSensor' || type === 'humiditySensor') {
+                summary.sensorReadings.push({ type, value: Number(obj?.userData?.sensorValue ?? 0) });
+            }
+        }
+    });
+
+    const summaries = Array.from(zoneMap.values()).map((summary) => {
+        const averageGrowth = summary.growthSamples > 0 ? summary.growthTotal / summary.growthSamples : 0;
+        const moistureReading = summary.sensorReadings.find((reading) => reading.type === 'moistureSensor');
+        const temperatureReading = summary.sensorReadings.find((reading) => reading.type === 'tempSensor');
+        const humidityReading = summary.sensorReadings.find((reading) => reading.type === 'humiditySensor');
+
+        if (moistureReading && Number(moistureReading.value) <= 0.35) {
+            summary.alerts.push('Low soil moisture');
+        }
+
+        if (temperatureReading && Number(temperatureReading.value) >= 35) {
+            summary.alerts.push('High temperature');
+        }
+
+        if (humidityReading && Number(humidityReading.value) <= 0.35) {
+            summary.alerts.push('Low humidity');
+        }
+
+        const status = computeZoneStatus({
+            ...summary,
+            averageGrowth
+        });
+
+        return {
+            ...summary,
+            averageGrowth,
+            sensorCount: summary.sensors,
+            moistureLabel: moistureReading ? formatSensorValue('moistureSensor', moistureReading.value) : '--',
+            temperatureLabel: temperatureReading ? formatSensorValue('tempSensor', temperatureReading.value) : '--',
+            humidityLabel: humidityReading ? formatSensorValue('humiditySensor', humidityReading.value) : '--',
+            status
+        };
+    });
+
+    summaries.sort((left, right) => left.label.localeCompare(right.label));
+    return summaries;
+}
+
+function updateFarmDashboard() {
+    const zoneList = document.getElementById('zone-dashboard-list');
+    const zoneCountElement = document.getElementById('dashboard-zone-count');
+    const objectCountElement = document.getElementById('dashboard-object-count');
+    const alertCountElement = document.getElementById('dashboard-alert-count');
+
+    if (!zoneList) {
+        return;
+    }
+
+    const zoneSummaries = summarizeZones();
+    const objectTotal = objects.length;
+    const alertTotal = zoneSummaries.reduce((total, summary) => total + summary.alerts.length, 0);
+
+    if (zoneCountElement) zoneCountElement.textContent = String(zoneSummaries.length);
+    if (objectCountElement) objectCountElement.textContent = String(objectTotal);
+    if (alertCountElement) alertCountElement.textContent = String(alertTotal);
+
+    if (zoneSummaries.length === 0) {
+        zoneList.innerHTML = `
+            <div class="zone-empty">
+                No objects are placed yet. Add crops, sensors, or devices to see each zone summary update here.
+            </div>
+        `;
+        return;
+    }
+
+    zoneList.innerHTML = zoneSummaries.map((summary) => {
+        const averageGrowthText = summary.growthSamples > 0 ? `${Math.round(summary.averageGrowth * 100)}%` : '--';
+        const alertText = summary.alerts.length > 0 ? summary.alerts.join(', ') : 'No alerts';
+
+        return `
+            <section class="zone-card">
+                <div class="zone-card-header">
+                    <div>
+                        <div class="zone-card-title">
+                            <span>${summary.label}</span>
+                        </div>
+                        <div class="zone-card-subtitle">${summary.totalObjects} objects monitored</div>
+                    </div>
+                    <span class="zone-status-pill ${summary.status.tone}">${summary.status.label}</span>
+                </div>
+
+                <div class="zone-stats">
+                    <div class="zone-stat">
+                        <span class="zone-stat-label">Crops</span>
+                        <span class="zone-stat-value">${summary.crops}</span>
+                    </div>
+                    <div class="zone-stat">
+                        <span class="zone-stat-label">Devices</span>
+                        <span class="zone-stat-value">${summary.runningDevices} active</span>
+                    </div>
+                    <div class="zone-stat">
+                        <span class="zone-stat-label">Growth</span>
+                        <span class="zone-stat-value">${averageGrowthText}</span>
+                    </div>
+                    <div class="zone-stat">
+                        <span class="zone-stat-label">Sensors</span>
+                        <span class="zone-stat-value">${summary.sensors}</span>
+                    </div>
+                    <div class="zone-stat">
+                        <span class="zone-stat-label">Moisture</span>
+                        <span class="zone-stat-value">${summary.moistureLabel}</span>
+                    </div>
+                    <div class="zone-stat">
+                        <span class="zone-stat-label">Temp</span>
+                        <span class="zone-stat-value">${summary.temperatureLabel}</span>
+                    </div>
+                </div>
+
+                <div class="zone-alerts">
+                    <strong>Status:</strong> ${alertText}<br>
+                    <strong>Humidity:</strong> ${summary.humidityLabel}
+                </div>
+            </section>
+        `;
+    }).join('');
+}
 
 // Initialize the scene
 export async function init() {
@@ -143,6 +357,7 @@ export async function init() {
 
         const objectCountElement = document.getElementById('object-count')
         if(objectCountElement) objectCountElement.textContent = objects.length
+        updateFarmDashboard()
 
     }catch(error) {
         console.error('failed to load objs')
@@ -201,10 +416,14 @@ export async function init() {
                     }
                 }
             })
+
+            updateFarmDashboard()
         } catch (error) {
             console.error("Failed to sync live sensor data:", error);
         }
     }, 10000)
+
+    window.updateFarmDashboard = updateFarmDashboard;
 }
 
 

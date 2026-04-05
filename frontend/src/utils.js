@@ -1,6 +1,6 @@
-import { createObject as createObjectMesh } from "./objects"
-import { createObject, deleteObject, deleteAllObjects, toggleDevice, updateObjectPosition } from "./apiService"
-
+import { createObject, deleteAllObjects, deleteObject, toggleDevice, updateObjectPosition } from "./apiService";
+import { createObject as createObjectMesh } from "./objects";
+import { handleSensorClick } from "./sensorOverlay";
 
 export function setupEventListeners(context) {
     const { renderer, camera, scene, ground, objectsRef, objectConfigs } = context;
@@ -84,6 +84,7 @@ export function setupEventListeners(context) {
                     
                     // Save state
                     saveObjects()
+                    window.updateFarmDashboard?.()
 
                     const targetToRefresh = contextMenuTarget
 
@@ -137,6 +138,7 @@ export function setupEventListeners(context) {
             }
             updateObjectCount()
             saveObjects()
+            window.updateFarmDashboard?.()
         } catch (error) {
             console.error('failed to delete obj')
         }
@@ -155,6 +157,7 @@ export function setupEventListeners(context) {
             objects.length = 0;
             updateObjectCount();
             saveObjects();
+            window.updateFarmDashboard?.()
         } catch (error) {
             console.error('Failed to clear objects:', error);
             alert(`Error clearing objects: ${error.message}`);
@@ -343,6 +346,7 @@ export function setupEventListeners(context) {
                             
                             updateObjectCount();
                             deselectAllObjects();
+                            window.updateFarmDashboard?.()
                         })
                         .catch(error => {
                             console.error('Failed to create object:', error);
@@ -365,6 +369,7 @@ export function setupEventListeners(context) {
             if (intersects.length > 0) {
                 const clickedObject = findParentGroup(intersects[0].object);
                 if (clickedObject) {
+                    handleSensorClick(intersectObjects);
                     showContextMenu(event.clientX, event.clientY, clickedObject);
                 }
             } else {
@@ -541,6 +546,8 @@ export function setupEventListeners(context) {
                 } catch (error) {
                     console.error('Error saving new position:', error);
                 }
+
+                window.updateFarmDashboard?.()
             }
         }
     });
@@ -558,6 +565,7 @@ export function addObject(scene, objectsRef, type, position, dbData = null, obje
     
     if (dbData && dbData.metadata) {
         obj.userData.dbId = dbData.id;
+        obj.userData.zoneId = dbData.zone_id ?? dbData.zoneId ?? null;
         obj.userData.isRunning = dbData.metadata.is_running || false;
         
         obj.userData.growth = (dbData.metadata.growth !== undefined && dbData.metadata.growth !== null) 

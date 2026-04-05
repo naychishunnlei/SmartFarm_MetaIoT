@@ -50,6 +50,31 @@
                 </div>
             </div>
 
+            <aside class="zone-dashboard" id="zone-dashboard" aria-label="Farm zone dashboard" aria-live="polite">
+                <div class="zone-dashboard-header">
+                    <div class="zone-dashboard-kicker">Live Summary</div>
+                    <h2>Zone Dashboard</h2>
+                    <p>Floating view of each zone with live status, crop health, and device activity.</p>
+                </div>
+
+                <div class="zone-dashboard-summary">
+                    <div class="dashboard-metric">
+                        <span class="metric-value" id="dashboard-zone-count">0</span>
+                        <span class="metric-label">Zones</span>
+                    </div>
+                    <div class="dashboard-metric">
+                        <span class="metric-value" id="dashboard-object-count">0</span>
+                        <span class="metric-label">Objects</span>
+                    </div>
+                    <div class="dashboard-metric">
+                        <span class="metric-value" id="dashboard-alert-count">0</span>
+                        <span class="metric-label">Alerts</span>
+                    </div>
+                </div>
+
+                <div class="zone-dashboard-list" id="zone-dashboard-list"></div>
+            </aside>
+
             <!-- Add Items Button & Dropdown -->
             <div class="add-items-container">
                 <button id="add-items-btn" class="add-items-btn">
