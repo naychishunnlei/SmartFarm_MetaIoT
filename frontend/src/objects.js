@@ -44,7 +44,7 @@ export function createObject(type, position) {
     group.userData = { 
         type: type, 
         id: Date.now() + Math.random(),
-        growth: 0.4,
+        growth: 0.2,
     }
 
     // If it is a crop, set its initial scale to be very small

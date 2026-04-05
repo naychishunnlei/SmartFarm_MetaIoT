@@ -318,7 +318,6 @@ document.getElementById('save-btn').onclick = async () => {
     }
   }
 
-  // alert("Avatar Saved! Heading to the Farm...");
   window.location.href = 'map.html';
 };
 
