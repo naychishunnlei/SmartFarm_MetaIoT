@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Farmverse - Avatar UI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0; padding: 0;
+            background: #0a0a0f; 
+            font-family: 'Inter', sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; overflow: hidden; color: #fff;
+        }
+
+        .app-window {
+            display: flex;
+            width: 90vw; max-width: 1200px; height: 85vh;
+            background: #151522;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+            border: 1px solid rgba(255,255,255,0.05);
+            overflow: hidden;
+        }
+
+        .editor-panel { flex: 1.2; display: flex; flex-direction: column; padding: 40px; border-right: 1px solid rgba(255,255,255,0.05); }
+        
+        .top-tabs {
+            display: flex; gap: 30px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 30px;
+        }
+        .top-tabs div {
+            cursor: pointer; padding-bottom: 15px; font-weight: 600; color: #666; transition: 0.3s;
+        }
+        .top-tabs div.active { color: #7c6df9; border-bottom: 2px solid #7c6df9; }
+
+        .editor-body { display: flex; flex: 1; gap: 30px; }
+        
+        .side-menu { display: flex; flex-direction: column; gap: 12px; width: 160px; }
+        .side-menu button {
+            background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05);
+            color: #888; padding: 14px; border-radius: 12px; cursor: pointer;
+            text-align: left; font-size: 14px; transition: all 0.2s;
+        }
+        .side-menu button.active {
+            background: #7c6df9; color: #fff; border-color: #7c6df9;
+        }
+
+        .options-grid {
+            flex: 1; display: flex; flex-wrap: wrap; gap: 15px; align-content: flex-start;
+            background: rgba(0,0,0,0.2); border-radius: 20px; padding: 25px;
+            overflow-y: auto;
+        }
+        
+        .swatch {
+            width: 45px; height: 45px; border-radius: 50%; cursor: pointer;
+            border: 3px solid transparent; transition: 0.2s;
+        }
+        .swatch.selected { border-color: #fff; transform: scale(1.1); }
+
+        .option-card {
+            width: 110px; height: 50px; background: rgba(255,255,255,0.05);
+            border-radius: 12px; display: flex; justify-content: center; align-items: center;
+            cursor: pointer; font-size: 13px; color: #aaa; border: 1px solid transparent;
+        }
+        .option-card.selected { border-color: #7c6df9; background: rgba(124, 109, 249, 0.1); color: #fff; }
+
+        .preview-panel { flex: 0.8; position: relative; background: radial-gradient(circle at center, #1e1e2f 0%, #0a0a10 100%); }
+        #canvas-container { width: 100%; height: 100%; }
+
+        .actions { position: absolute; bottom: 30px; right: 30px; display: flex; gap: 15px; }
+        .actions button { padding: 14px 28px; border-radius: 14px; cursor: pointer; font-weight: 600; border: none; }
+        .btn-discard { background: #2a2a36; color: #ccc; }
+        .btn-save { background: #7c6df9; color: #fff; box-shadow: 0 4px 15px rgba(124, 109, 249, 0.3); }
+    </style>
+</head>
+<body>
+
+<div class="app-window">
+    <div class="editor-panel">
+        <div class="top-tabs">
+            <div class="active" data-tab="body">Physical</div>
+            <div data-tab="wardrobe">Outfit</div>
+        </div>
+
+        <div class="editor-body">
+            <div class="side-menu" id="side-menu"></div>
+            <div class="options-grid" id="options-grid"></div>
+        </div>
+    </div>
+
+    <div class="preview-panel">
+        <div id="canvas-container"></div>
+        <div class="actions">
+            <button class="btn-discard" onclick="window.location.href='map.html'">Discard</button>
+            <button class="btn-save" id="save-btn">Save Avatar</button>
+        </div>
+    </div>
+</div>
+
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+</script>
+<script type="module" src="src/avatar.js"></script>
+
+</body>
+</html>

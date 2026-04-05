@@ -38,6 +38,7 @@ async function request(endpoint, method = 'GET', data = null) {
 export const registerUser = (userData) => request('/users/register', 'POST', userData)
 export const loginUser = (credentials) => request('/users/login', 'POST', credentials)
 export const getUserProfile = () => request('/users/profile', 'GET')
+export const updateUserAvatar = (avatarConfig) => request('/users/avatar', 'PUT', {avatarConfig})
 
 export const createObject = (farmId, objectData) => request(`/farms/${farmId}/objects`, 'POST', objectData)
 export const getObjectsForFarm = (farmId) => request(`/farms/${farmId}/objects`, 'GET')
