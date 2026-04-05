@@ -14,6 +14,10 @@ let fillLight;
 let isNightMode = false
 let streetLightPointLights = []
 let streetLightMaterial = null
+let userAvatar = null
+let avatarTarget = new THREE.Vector3()
+
+
 let selectedObjectType = null;
 let deleteMode = false;
 let raycaster, mouse;
@@ -162,6 +166,19 @@ export async function init() {
     setupEventListeners(context)
 
     setupCameraView()
+
+    const savedAvatarJson = localStorage.getItem('farmverse_avatar');
+    if (savedAvatarJson) {
+        try {
+            const avatarConfig = JSON.parse(savedAvatarJson);
+            userAvatar = buildFarmAvatar(avatarConfig);
+            userAvatar.position.set(0, 0, 5); // Start position
+            scene.add(userAvatar);
+            pickNewAvatarTarget();
+        } catch (e) {
+            console.error("Failed to build avatar:", e);
+        }
+    }
 
     // Hide loading screen
     setTimeout(() => {
@@ -588,6 +605,7 @@ function setupLighting() {
 function animate() {
     requestAnimationFrame(animate)
 
+    let isMoving = false
     if (keys.w || keys.a || keys.s || keys.d) {
         const moveSpeed = 0.2; 
         const front = new THREE.Vector3();
@@ -605,10 +623,51 @@ function animate() {
         if (keys.a) direction.sub(right);
         if (keys.d) direction.add(right);
 
-        direction.normalize().multiplyScalar(moveSpeed);
+        // direction.normalize().multiplyScalar(moveSpeed);
+         if (direction.lengthSq() > 0) {
+            direction.normalize();
 
-        camera.position.add(direction);
-        controls.target.add(direction);
+            if (userAvatar) {
+                // Move avatar relative to camera direction
+                userAvatar.position.addScaledVector(direction, moveSpeed);
+                
+                // Smoothly rotate avatar to face movement direction
+                const targetRotation = Math.atan2(direction.x, direction.z);
+                let diff = targetRotation - userAvatar.rotation.y;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                userAvatar.rotation.y += diff * 0.15;
+
+                // Move camera to follow the avatar
+                camera.position.addScaledVector(direction, moveSpeed);
+                controls.target.copy(userAvatar.position);
+                isMoving = true;
+            } else {
+                // Moving camera freely if no avatar exists
+                direction.multiplyScalar(moveSpeed);
+                camera.position.add(direction);
+                controls.target.add(direction);
+            }
+        }
+
+        // camera.position.add(direction);
+        // controls.target.add(direction);
+    }
+
+    if (userAvatar) {
+        if (isMoving) {
+            const time = Date.now() * 0.015;
+            userAvatar.userData.leftLeg.rotation.x = Math.sin(time) * 0.6;
+            userAvatar.userData.rightLeg.rotation.x = Math.sin(time + Math.PI) * 0.6;
+            userAvatar.userData.leftArm.rotation.x = Math.sin(time + Math.PI) * 0.6;
+            userAvatar.userData.rightArm.rotation.x = Math.sin(time) * 0.6;
+        } else {
+            // Reset limbs when idle
+            userAvatar.userData.leftLeg.rotation.x = 0;
+            userAvatar.userData.rightLeg.rotation.x = 0;
+            userAvatar.userData.leftArm.rotation.x = 0;
+            userAvatar.userData.rightArm.rotation.x = 0;
+        }
     }
 
     controls.update()
@@ -680,6 +739,7 @@ function animate() {
                 if (obj.spotLight) obj.spotLight.intensity = 0;
             }
         }
+
     })
 
     renderer.render(scene, camera);
@@ -728,6 +788,160 @@ function updateSprinklerWater(waterGroup) {
 
     waterGroup.particles.geometry.attributes.position.needsUpdate = true;
 }
+
+function pickNewAvatarTarget() {
+    avatarTarget.set(
+        (Math.random() - 0.5) * 14, // Random X inside farm bounds
+        0,
+        (Math.random() - 0.5) * 14  // Random Z inside farm bounds
+    );
+}
+
+// ...existing code...
+function buildFarmAvatar(config) {
+    const mats = {
+        skin: new THREE.MeshStandardMaterial({ color: config.skinColor, roughness: 0.3 }),
+        hair: new THREE.MeshStandardMaterial({ color: config.hairColor, roughness: 0.8 }),
+        shirt: new THREE.MeshStandardMaterial({ color: config.shirtColor, roughness: 0.7 }),
+        bottom: new THREE.MeshStandardMaterial({ color: config.bottomColor, roughness: 0.7 }),
+        shoe: new THREE.MeshStandardMaterial({ color: '#222222', roughness: 0.9 }),
+        faceDark: new THREE.MeshStandardMaterial({ color: '#2b2b2b', roughness: 0.9 }),
+        lip: new THREE.MeshStandardMaterial({ color: '#c06b72', roughness: 0.6 }),
+        stripe: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.5 })
+    };
+
+    const group = new THREE.Group();
+
+    // 1. Shirt & Body
+    const isTankTop = config.shirtStyle === 'tanktop';
+    const isOversized = config.shirtStyle === 'oversized';
+    const isStriped = config.shirtStyle === 'striped';
+    const isDress = config.shirtStyle === 'dress';
+
+    const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.45, 0.16), mats.shirt);
+    bodyMesh.position.y = 1.2;
+    const shirtScale = isOversized ? 1.25 : 1.0;
+    bodyMesh.scale.set(shirtScale, 1, shirtScale);
+    group.add(bodyMesh);
+
+    if (isStriped) {
+        const stripeGroup = new THREE.Group();
+        for (let i = 0; i < 3; i++) {
+            const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.02, 0.17), mats.stripe);
+            stripe.position.set(0, 1.32 - (i * 0.08), 0);
+            stripeGroup.add(stripe);
+        }
+        group.add(stripeGroup);
+    }
+
+    if (isDress) {
+        const dressMesh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.35, 0.18), mats.shirt);
+        dressMesh.position.set(0, 0.8, 0);
+        group.add(dressMesh);
+    }
+
+    // 2. Head & Face
+    const headGroup = new THREE.Group();
+    headGroup.position.y = 1.575;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), mats.skin);
+    headGroup.add(head);
+
+    const faceZ = 0.16;
+    const eyeGeo = new THREE.BoxGeometry(0.04, 0.04, 0.02);
+    const leftEye = new THREE.Mesh(eyeGeo, mats.faceDark);
+    leftEye.position.set(-0.06, 0.045, faceZ);
+    const rightEye = new THREE.Mesh(eyeGeo, mats.faceDark);
+    rightEye.position.set(0.06, 0.045, faceZ);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.05), mats.skin);
+    nose.position.set(0, 0, faceZ + 0.01);
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.02), mats.lip);
+    mouth.position.set(0, -0.055, faceZ);
+    headGroup.add(leftEye, rightEye, nose, mouth);
+
+    // Hair
+    if (config.hairStyle === 'bob') {
+        const hairGroup = new THREE.Group();
+        const topCap = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.34), mats.hair);
+        topCap.position.set(0, 0.15, 0);
+        const backPlate = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.05), mats.hair);
+        backPlate.position.set(0, 0, -0.145);
+        const leftSide = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.22), mats.hair);
+        leftSide.position.set(-0.145, 0, -0.06);
+        const rightSide = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.22), mats.hair);
+        rightSide.position.set(0.145, 0, -0.06);
+        hairGroup.add(topCap, backPlate, leftSide, rightSide);
+        headGroup.add(hairGroup);
+    } else {
+        const hairGeo = config.hairStyle === 'short' ? new THREE.BoxGeometry(0.32, 0.08, 0.32) : new THREE.BoxGeometry(0.36, 0.38, 0.36);
+        const hair = new THREE.Mesh(hairGeo, mats.hair);
+        hair.position.y = config.hairStyle === 'short' ? 0.15 : 0.05;
+        if (config.hairStyle === 'long') hair.position.z = -0.05;
+        headGroup.add(hair);
+    }
+    group.add(headGroup);
+
+    // Pivots for limbs
+    const createLimb = (geo, mat, yOffset, xPos) => {
+        const pivot = new THREE.Group();
+        pivot.position.set(xPos, yOffset, 0);
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.y = -geo.parameters.height / 2;
+        pivot.add(mesh);
+        return pivot;
+    };
+
+    // 3. Arms & Hands
+    const armX = isOversized ? 0.26 : 0.22;
+    const armMat = isTankTop ? mats.skin : mats.shirt;
+    const leftArm = createLimb(new THREE.BoxGeometry(0.12, 0.45, 0.12), armMat, 1.425, -armX);
+    const rightArm = createLimb(new THREE.BoxGeometry(0.12, 0.45, 0.12), armMat, 1.425, armX);
+    
+    const handGeo = new THREE.BoxGeometry(0.1, 0.12, 0.08);
+    const lHand = new THREE.Mesh(handGeo, mats.skin);
+    lHand.position.set(0, -0.51, 0.02);
+    leftArm.add(lHand);
+    const rHand = new THREE.Mesh(handGeo, mats.skin);
+    rHand.position.set(0, -0.51, 0.02);
+    rightArm.add(rHand);
+    group.add(leftArm, rightArm);
+
+    // 4. Legs & Pants
+    const isShorts = config.bottomStyle === 'shorts';
+    const leftLeg = new THREE.Group();
+    leftLeg.position.set(-0.09, 0.975, 0);
+    const rightLeg = new THREE.Group();
+    rightLeg.position.set(0.09, 0.975, 0);
+
+    const legSkinGeo = new THREE.BoxGeometry(0.12, 0.5, 0.12);
+    const pantsGeo = new THREE.BoxGeometry(0.14, 0.5, 0.14);
+
+    const buildLegOptions = (legGroup) => {
+        const skin = new THREE.Mesh(legSkinGeo, mats.skin);
+        skin.position.y = -0.25;
+        legGroup.add(skin);
+
+        if (!isDress) {
+            const pants = new THREE.Mesh(pantsGeo, mats.bottom);
+            pants.position.y = isShorts ? -0.125 : -0.25;
+            pants.scale.y = isShorts ? 0.5 : 1.0;
+            legGroup.add(pants);
+        }
+
+        const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.22), mats.shoe);
+        shoe.position.set(0, -0.56, 0.04);
+        legGroup.add(shoe);
+    };
+
+    buildLegOptions(leftLeg);
+    buildLegOptions(rightLeg);
+    group.add(leftLeg, rightLeg);
+
+    group.userData = { leftArm, rightArm, leftLeg, rightLeg };
+    group.scale.set(0.8, 0.8, 0.8);
+    
+    return group;
+}
+
 
 
 // Window resize handler
