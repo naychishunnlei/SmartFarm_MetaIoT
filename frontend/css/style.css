@@ -140,7 +140,7 @@ body {
     justify-content: center;
     padding: 150px 20px 80px 20px;
     background: linear-gradient(135deg, rgba(0, 0, 0, 0.35)),
-                url('../public/images/farm.jpg') center/cover no-repeat;
+                url('/images/farm.jpg') center/cover no-repeat;
     background-attachment: fixed;
     color: white;
     min-height: 775px;

@@ -298,24 +298,32 @@ export function setupEventListeners(context) {
             }
         } else if (selectedObjectType) {
             //allow fan to be placed on existing objs
-            let intersectTargets = [ground];
-            if (selectedObjectType === 'fan') {
-                intersectTargets = [ground, ...objects];
-            }
+            const intersectTargets = [ground, ...objects]
 
-            const intersects = raycaster.intersectObjects(intersectTargets, true);
-            if (intersects.length > 0) {
-                const intersection = intersects[0]
-                const point = intersection.point.clone()
+            const intersects = raycaster.intersectObjects(intersectTargets, true)
+            const validIntersects = intersects.filter(hit => {
+                 if (selectedObjectType === 'fan') {
+                    return true
+                }
+
+                if (hit.object === ground) {
+                    return true
+                }
+                return hit.point.y < 2.5 && hit.face && hit.face.normal.y > 0.5
+            })
+
+            if (validIntersects.length > 0) {
+                const intersection = validIntersects[0];
+                const point = intersection.point.clone();
                 point.x = Math.round(point.x * 2) / 2;
                 point.z = Math.round(point.z * 2) / 2;
                
-
                 if (selectedObjectType !== 'fan') {
-                    point.y = 0;
+                    point.y = intersection.point.y; 
                 } else {
-                    point.y = intersection.point.y + 0.05
+                    point.y = intersection.point.y + 0.05;
                 }
+
 
                 if (Math.abs(point.x) < 40 && Math.abs(point.z) < 40) {
                     const farmId = localStorage.getItem('selectedFarmId')
@@ -369,7 +377,7 @@ export function setupEventListeners(context) {
             if (intersects.length > 0) {
                 const clickedObject = findParentGroup(intersects[0].object);
                 if (clickedObject) {
-                    handleSensorClick(intersectObjects);
+                    handleSensorClick(intersects);
                     showContextMenu(event.clientX, event.clientY, clickedObject);
                 }
             } else {
@@ -561,7 +569,7 @@ export function addObject(scene, objectsRef, type, position, dbData = null, obje
     const category = objectConfigs && objectConfigs[type] ? objectConfigs[type].category : defaultCategory
     obj.userData.category = category
 
-    obj.userData.growth = 0.4
+    obj.userData.growth = 0.2
     
     if (dbData && dbData.metadata) {
         obj.userData.dbId = dbData.id;

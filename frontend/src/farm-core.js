@@ -387,7 +387,7 @@ export async function init() {
         try {
             const avatarConfig = JSON.parse(savedAvatarJson);
             userAvatar = buildFarmAvatar(avatarConfig);
-            userAvatar.position.set(0, 0, 5); // Start position
+            userAvatar.position.set(0, 0, 5); 
             scene.add(userAvatar);
             pickNewAvatarTarget();
         } catch (e) {
@@ -842,8 +842,7 @@ function animate() {
         if (keys.a) direction.sub(right);
         if (keys.d) direction.add(right);
 
-        // direction.normalize().multiplyScalar(moveSpeed);
-         if (direction.lengthSq() > 0) {
+        if (direction.lengthSq() > 0) {
             direction.normalize();
 
             if (userAvatar) {
@@ -857,6 +856,20 @@ function animate() {
                 while (diff < -Math.PI) diff += Math.PI * 2;
                 userAvatar.rotation.y += diff * 0.15;
 
+                // Cast a ray straight down from above the avatar
+                raycaster.set(
+                    new THREE.Vector3(userAvatar.position.x, userAvatar.position.y + 2, userAvatar.position.z), 
+                    new THREE.Vector3(0, -1, 0)
+                );
+                
+                // Find what surface is immediately below the avatar
+                const intersects = raycaster.intersectObjects([ground, ...objects], true);
+                const floorIntersects = intersects.filter(hit => hit.point.y <= userAvatar.position.y + 0.6);
+
+                if (floorIntersects.length > 0) {
+                    userAvatar.position.y = floorIntersects[0].point.y;
+                }
+
                 // Move camera to follow the avatar
                 camera.position.addScaledVector(direction, moveSpeed);
                 controls.target.copy(userAvatar.position);
@@ -868,9 +881,6 @@ function animate() {
                 controls.target.add(direction);
             }
         }
-
-        // camera.position.add(direction);
-        // controls.target.add(direction);
     }
 
     if (userAvatar) {
@@ -1156,9 +1166,16 @@ function buildFarmAvatar(config) {
     group.add(leftLeg, rightLeg);
 
     group.userData = { leftArm, rightArm, leftLeg, rightLeg };
-    group.scale.set(0.8, 0.8, 0.8);
+    // group.scale.set(0.8, 0.8, 0.8);
+    const outerGroup = new THREE.Group();
+    group.position.y = -0.4; 
+    outerGroup.add(group);
+
+    outerGroup.userData = group.userData;
+    outerGroup.scale.set(0.8, 0.8, 0.8);
     
-    return group;
+    
+    return outerGroup;
 }
 
 
