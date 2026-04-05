@@ -47,6 +47,8 @@ unsigned long alarmStartTime = 0;
 bool alarmActive = false;
 bool buzzerDone = false;
 
+String hardwareID = ""; // ✅ Added to store the MAC Address
+
 DHT dht(DHTPIN, DHTTYPE);
 WebSocketsClient webSocket;
 
@@ -206,11 +208,15 @@ void sendDataTask(void *pvParameters) {
 
       float humidity = dht.readHumidity();
 
+      // ✅ Updated to use hardwareID instead of hardcoded farm_id
+      String tempStr = isnan(currentTemp) ? "null" : String(currentTemp);
+      String humStr = isnan(humidity) ? "null" : String(humidity);
+
       String json = "{";
-      json += "\"farm_id\":1,";                                          // ✅ change to your actual farm id
+      json += "\"hardware_id\":\"" + hardwareID + "\","; 
       json += "\"zone_id\":" + String(zones[0].id) + ",";
-      json += "\"temperature\":" + String(currentTemp) + ",";
-      json += "\"humidity\":" + String(isnan(humidity) ? 0 : humidity) + ",";
+      json += "\"temperature\":" + tempStr + ",";
+      json += "\"humidity\":" + humStr + ",";
       json += "\"light_lux\":0,";
       json += "\"moisture_1\":" + String(zones[0].moisture) + ",";
       json += "\"pump\":" + String(pumpOn ? "true" : "false") + ",";
@@ -229,7 +235,7 @@ void sendDataTask(void *pvParameters) {
       Serial.println("[WS] WiFi disconnected — skipping send");
     }
 
-    vTaskDelay(60000 / portTICK_PERIOD_MS);
+    vTaskDelay(6000 / portTICK_PERIOD_MS);
   }
 }
 
@@ -271,6 +277,9 @@ void setup() {
   dht.begin();
   Serial.println("[BOOT] DHT11 initialized");
 
+  // Force Station Mode just in case
+  WiFi.mode(WIFI_STA);
+
   Serial.printf("[BOOT] Connecting to WiFi: %s\n", ssid);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -279,6 +288,10 @@ void setup() {
   }
   Serial.println();
   Serial.printf("[BOOT] WiFi connected — IP: %s\n", WiFi.localIP().toString().c_str());
+
+  // ✅ Grab the MAC Address here (this will not crash!)
+  hardwareID = WiFi.macAddress();
+  Serial.println("[BOOT] Hardware ID (MAC): " + hardwareID);
 
   Serial.printf("[BOOT] Connecting to WebSocket ws://%s:%d\n", ws_host, ws_port);
   webSocket.begin(ws_host, ws_port, "/ws");

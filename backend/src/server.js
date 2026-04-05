@@ -6,6 +6,7 @@ import { connectDatabase } from './config/database.js';
 import farmRoute from './presentation/routes/farmRoute.js';
 import objectRoutes from './presentation/routes/objectRoutes.js';
 import userRoute from './presentation/routes/userRoute.js';
+import zoneRoute from './presentation/routes/zoneRoute.js';
 import initWebSocket from './presentation/websocketServer.js';
 
 dotenv.config();
@@ -34,14 +35,7 @@ initWebSocket(server);
 app.use('/api/users', userRoute)
 app.use('/api/farms', farmRoute)
 app.use('/api/farms/:farmId/objects', objectRoutes)
-
-// Root route for quick server verification in browser
-app.get('/', (req, res) => {
-    res.json({
-        message: 'SmartFarm backend is running',
-        health: '/api/health'
-    });
-});
+app.use('/api/farms/:farmId/zones', zoneRoute)
 
 // Health Check
 app.get('/api/health', (req, res) => {
