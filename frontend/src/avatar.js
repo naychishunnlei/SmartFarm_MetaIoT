@@ -1,7 +1,25 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { updateUserAvatar } from './apiService';
 
+(async function checkExistingAvatar() {
+    const token = localStorage.getItem('farmverseToken');
+    if (!token) { window.location.href = 'index.html'; return; }
+
+    try {
+        const response = await fetch('http://localhost:5001/api/users/profile', {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const userData = await response.json();
+
+        // If they ALREADY have an avatar, skip this page and go to map
+        if (userData.has_avatar) {
+            window.location.href = 'map.html';
+        }
+    } catch (e) {
+        window.location.href = 'index.html';
+    }
+})();
 
 const config = {
   skinColor: '#f1c27d',
@@ -305,20 +323,53 @@ document.querySelectorAll('.top-tabs div').forEach(tab => {
 });
 
 document.getElementById('save-btn').onclick = async () => {
-  console.log("Saving Configuration:", config);
-  alert("Avatar Saved to FarmVerse!");
+  const saveBtn = document.getElementById('save-btn');
+  saveBtn.textContent = "Saving...";
+  saveBtn.disabled = true;
 
-  localStorage.setItem('farmverse_avatar', JSON.stringify(config))
-  const token = localStorage.getItem('farmverseToken'); // Make sure this matches apiService's token key
-  if (token) {
-    try {
-      await updateUserAvatar(config);
-    } catch (e) {
-      console.error("Failed to sync avatar to database:", e);
-    }
+  console.log("Saving Configuration:", config);
+  
+  // Save locally for instant 3D loading
+  localStorage.setItem('farmverse_avatar', JSON.stringify(config));
+
+  const token = localStorage.getItem('farmverseToken');
+  
+  if (!token) {
+    alert("You must be logged in to save your avatar to the database.");
+    window.location.href = 'index.html';
+    return;
   }
 
-  window.location.href = 'map.html';
+  try {
+    // Direct fetch to guarantee it matches your backend userController exactly
+    const response = await fetch('http://localhost:5001/api/users/avatar', {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        // 🌟 CRITICAL: Wrapping config inside "avatarConfig" to match req.body.avatarConfig
+        body: JSON.stringify({ avatarConfig: config }) 
+    });
+
+    if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.message || 'Database rejected the update');
+    }
+
+    alert("Avatar successfully saved to your Farmverse profile!");
+    
+    // 🌟 ONLY redirect to map.html if the database actually succeeded!
+    window.location.href = 'map.html'; 
+
+  } catch (error) {
+    console.error("Database sync failed:", error);
+    alert(`Error saving avatar: ${error.message}`); // Now you will actually see what went wrong!
+    
+    // Reset button so you can try again
+    saveBtn.textContent = "Save Avatar";
+    saveBtn.disabled = false;
+  }
 };
 
 // --- Execution ---

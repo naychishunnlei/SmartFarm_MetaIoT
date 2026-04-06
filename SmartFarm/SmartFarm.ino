@@ -4,29 +4,30 @@
 #include <WebSocketsClient.h>
 
 // ---------------- CONFIG ----------------
-const char* ssid = "4GMIFI_3131";
+const char* ssid     = "4GMIFI_3131";
 const char* password = "1234567890";
-const char* ws_host = "192.168.0.57"; 
+const char* ws_host  = "192.168.0.57";
 const uint16_t ws_port = 5001;
 
-const char* ntpServer = "pool.ntp.org";
-const long  gmtOffset_sec = 25200;     // UTC+7 (Bangkok) — change if needed
+const char* ntpServer       = "pool.ntp.org";
+const long  gmtOffset_sec   = 25200;   // UTC+7 (Bangkok)
 const int   daylightOffset_sec = 0;
 
 // ---------------- PIN DEFINITIONS ----------------
-#define DHTPIN 14
-#define DHTTYPE DHT11
-#define WATER_LEVEL_PIN 27 
-#define BUZZER_PIN 25
-#define RED_LED_PIN 26
-#define FAN_RELAY 19
-#define BUTTON_PIN 32
-#define LIGHT_RELAY 23
+#define DHTPIN          14
+#define DHTTYPE         DHT11
+#define WATER_LEVEL_PIN 27
+#define BUZZER_PIN      25
+#define RED_LED_PIN     26
+#define FAN_RELAY       19
+#define LIGHT_RELAY     23
+#define BUTTON_PIN      32
 
 // ---------------- THRESHOLDS ----------------
 const int DRY_THRESHOLD = 2500;
 const int WET_THRESHOLD = 1500;
 
+// ---------------- ZONE DEFINITION ----------------
 struct Zone {
   int id;
   int soilPin;
@@ -35,19 +36,21 @@ struct Zone {
 };
 
 Zone zones[] = {
-  {1, 33, 18, 0}
+  {1, 33, 18, 0},
+  // {2, 34, 17, 0},  // Uncomment to add Zone 2
 };
-const int activeZones = 1;
+const int activeZones = sizeof(zones) / sizeof(zones[0]);
 
 // ---------------- GLOBALS ----------------
-bool tankIsLow = false;
-float currentTemp = 0;
+bool  tankIsLow      = false;
+float currentTemp    = 0.0;
+float currentHumidity = 0.0;   // ✅ Global so all tasks share the same reading
 
+bool alarmActive   = false;
+bool buzzerDone    = false;
 unsigned long alarmStartTime = 0;
-bool alarmActive = false;
-bool buzzerDone = false;
 
-String hardwareID = ""; // ✅ Added to store the MAC Address
+String hardwareID = "";
 
 DHT dht(DHTPIN, DHTTYPE);
 WebSocketsClient webSocket;
@@ -56,51 +59,45 @@ WebSocketsClient webSocket;
 void updateAlarm() {
   if (tankIsLow) {
     digitalWrite(RED_LED_PIN, HIGH);
-
     if (!buzzerDone) {
       if (!alarmActive) {
-        alarmActive = true;
-        alarmStartTime = millis();
+        alarmActive      = true;
+        alarmStartTime   = millis();
         digitalWrite(BUZZER_PIN, HIGH);
-        Serial.println("[ALARM] Tank is LOW! RED LED → ON");
-        Serial.println("[ALARM] Buzzer → ON (will stop after 3s)");
+        Serial.println("[ALARM] Tank LOW — LED ON, Buzzer ON");
       }
-
       if (millis() - alarmStartTime >= 3000) {
         digitalWrite(BUZZER_PIN, LOW);
         buzzerDone = true;
-        Serial.println("[ALARM] Buzzer → OFF (3s elapsed, LED stays ON)");
+        Serial.println("[ALARM] Buzzer OFF (3s elapsed, LED stays ON)");
       }
     }
-  } 
-  else {
+  } else {
     digitalWrite(RED_LED_PIN, LOW);
     digitalWrite(BUZZER_PIN, LOW);
     if (alarmActive || buzzerDone) {
-      Serial.println("[ALARM] Tank OK — RED LED → OFF, Buzzer → OFF, Alarm reset");
+      Serial.println("[ALARM] Tank OK — LED OFF, Buzzer OFF");
     }
     alarmActive = false;
-    buzzerDone = false;
+    buzzerDone  = false;
   }
 }
 
-// ---------------- LIGHT LOGIC ----------------
+// ---------------- LIGHT LOGIC (time-based) ----------------
 void updateLight() {
   static bool lastLightState = false;
 
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
-    Serial.println("[LIGHT] Failed to get time — skipping light control");
+    Serial.println("[LIGHT] Failed to get NTP time — skipping");
     return;
   }
 
   int hour = timeinfo.tm_hour;
-
-  // ON if hour >= 18 (6pm) OR hour < 6 (before 6am)
-  bool lightShouldBeOn = (hour >= 18 || hour < 6);
+  bool lightShouldBeOn = (hour >= 18 || hour < 6);   // ON 6pm–6am
 
   if (lightShouldBeOn != lastLightState) {
-    digitalWrite(LIGHT_RELAY, lightShouldBeOn ? HIGH : LOW);
+    digitalWrite(LIGHT_RELAY, lightShouldBeOn ? LOW : HIGH);  // relay: LOW = ON
     lastLightState = lightShouldBeOn;
 
     char timeStr[20];
@@ -112,8 +109,11 @@ void updateLight() {
 // ---------------- SENSOR TASK ----------------
 void readSensorsTask(void *pvParameters) {
   for (;;) {
-    currentTemp = dht.readTemperature();
-    float currentHumidity = dht.readHumidity();
+    float t = dht.readTemperature();
+    float h = dht.readHumidity();
+
+    if (!isnan(t)) currentTemp     = t;
+    if (!isnan(h)) currentHumidity = h;
 
     for (int i = 0; i < activeZones; i++) {
       zones[i].moisture = analogRead(zones[i].soilPin);
@@ -121,39 +121,30 @@ void readSensorsTask(void *pvParameters) {
 
     tankIsLow = (digitalRead(WATER_LEVEL_PIN) == LOW);
 
+    // ── Serial report ──────────────────────────────────────────
     Serial.println("========== [SENSOR READINGS] ==========");
-
-    if (isnan(currentTemp) || isnan(currentHumidity)) {
-      Serial.println("[DHT]  Failed to read from DHT11 sensor!");
-    } else {
-      Serial.printf("[DHT]  Temperature : %.1f C\n", currentTemp);
-      Serial.printf("[DHT]  Humidity    : %.1f %%\n", currentHumidity);
-    }
+    Serial.printf("[DHT]  Temp: %.1f °C  |  Humidity: %.1f %%\n", currentTemp, currentHumidity);
 
     for (int i = 0; i < activeZones; i++) {
-      Serial.printf("[SOIL] Zone %d moisture : %d (raw ADC)", zones[i].id, zones[i].moisture);
-      if (zones[i].moisture > DRY_THRESHOLD) {
-        Serial.println("  → DRY");
-      } else if (zones[i].moisture < WET_THRESHOLD) {
-        Serial.println("  → WET");
-      } else {
-        Serial.println("  → OK");
-      }
+      int m = zones[i].moisture;
+      const char* status = (m > DRY_THRESHOLD) ? "DRY" : (m < WET_THRESHOLD) ? "WET" : "OK";
+      Serial.printf("[SOIL] Zone %d: %d raw ADC → %s\n", zones[i].id, m, status);
     }
 
     Serial.printf("[TANK] Water level : %s\n", tankIsLow ? "LOW" : "OK");
-    for (int i = 0; i < activeZones; i++) {
-      Serial.printf("[PUMP]  Zone %d : %s\n", zones[i].id, digitalRead(zones[i].pumpPin) == LOW ? "ON" : "OFF");
-    }
-    Serial.printf("[FAN]   Relay : %s\n", digitalRead(FAN_RELAY) == LOW ? "ON" : "OFF");
-    Serial.printf("[LIGHT] Relay : %s\n", digitalRead(LIGHT_RELAY) == LOW ? "ON" : "OFF");
 
-    // Print current time
+    for (int i = 0; i < activeZones; i++) {
+      Serial.printf("[PUMP] Zone %d : %s\n", zones[i].id,
+        digitalRead(zones[i].pumpPin) == LOW ? "ON" : "OFF");
+    }
+    Serial.printf("[FAN]   : %s\n", digitalRead(FAN_RELAY)   == LOW ? "ON" : "OFF");
+    Serial.printf("[LIGHT] : %s\n", digitalRead(LIGHT_RELAY) == LOW ? "ON" : "OFF");
+
     struct tm timeinfo;
     if (getLocalTime(&timeinfo)) {
       char timeStr[30];
       strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &timeinfo);
-      Serial.printf("[TIME]  Current time : %s\n", timeStr);
+      Serial.printf("[TIME]  %s\n", timeStr);
     }
     Serial.println("========================================");
 
@@ -163,11 +154,12 @@ void readSensorsTask(void *pvParameters) {
 
 // ---------------- CONTROL LOGIC ----------------
 void controlLogicTask(void *pvParameters) {
-  static bool lastPumpState[10] = {false};
+  static bool lastPumpState[sizeof(zones) / sizeof(zones[0])] = {};
   static bool lastFanState = false;
 
   for (;;) {
     updateAlarm();
+    updateLight();   // ✅ Time-based light control runs every cycle
 
     for (int i = 0; i < activeZones; i++) {
       bool pumpShouldBeOn = (zones[i].moisture > DRY_THRESHOLD && !tankIsLow);
@@ -177,20 +169,23 @@ void controlLogicTask(void *pvParameters) {
         lastPumpState[i] = pumpShouldBeOn;
 
         if (pumpShouldBeOn) {
-          Serial.printf("[PUMP] Zone %d → ON  (soil DRY: %d > %d)\n", zones[i].id, zones[i].moisture, DRY_THRESHOLD);
+          Serial.printf("[PUMP] Zone %d → ON  (soil dry: %d > %d)\n",
+            zones[i].id, zones[i].moisture, DRY_THRESHOLD);
         } else if (tankIsLow) {
-          Serial.printf("[PUMP] Zone %d → OFF (tank LOW)\n", zones[i].id);
+          Serial.printf("[PUMP] Zone %d → OFF (tank low)\n", zones[i].id);
         } else {
-          Serial.printf("[PUMP] Zone %d → OFF (soil WET: %d < %d)\n", zones[i].id, zones[i].moisture, WET_THRESHOLD);
+          Serial.printf("[PUMP] Zone %d → OFF (soil ok: %d)\n",
+            zones[i].id, zones[i].moisture);
         }
       }
     }
 
-    bool fanShouldBeOn = (currentTemp > 30.0);
+    bool fanShouldBeOn = (currentTemp > 24.0);
     if (fanShouldBeOn != lastFanState) {
       digitalWrite(FAN_RELAY, fanShouldBeOn ? LOW : HIGH);
       lastFanState = fanShouldBeOn;
-      Serial.printf("[FAN]  → %s (temp %.1f C)\n", fanShouldBeOn ? "ON" : "OFF", currentTemp);
+      Serial.printf("[FAN]  → %s (temp %.1f °C)\n",
+        fanShouldBeOn ? "ON" : "OFF", currentTemp);
     }
 
     vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -200,59 +195,71 @@ void controlLogicTask(void *pvParameters) {
 // ---------------- SEND DATA ----------------
 void sendDataTask(void *pvParameters) {
   for (;;) {
-    if (WiFi.status() == WL_CONNECTED) {
+    if (WiFi.status() == WL_CONNECTED && webSocket.isConnected()) {
 
       bool lightOn = (digitalRead(LIGHT_RELAY) == LOW);
-      bool fanOn   = (digitalRead(FAN_RELAY) == LOW);
-      bool pumpOn  = (digitalRead(zones[0].pumpPin) == LOW);
+      bool fanOn   = (digitalRead(FAN_RELAY)   == LOW);
 
-      float humidity = dht.readHumidity();
+      String tempStr = isnan(currentTemp)     ? "null" : String(currentTemp, 1);
+      String humStr  = isnan(currentHumidity) ? "null" : String(currentHumidity, 1);
 
-      // ✅ Updated to use hardwareID instead of hardcoded farm_id
-      String tempStr = isnan(currentTemp) ? "null" : String(currentTemp);
-      String humStr = isnan(humidity) ? "null" : String(humidity);
+      // One message per zone — backend maps zone_id to global DB zone
+      for (int i = 0; i < activeZones; i++) {
+        bool pumpOn = (digitalRead(zones[i].pumpPin) == LOW);
 
-      String json = "{";
-      json += "\"hardware_id\":\"" + hardwareID + "\","; 
-      json += "\"zone_id\":" + String(zones[0].id) + ",";
-      json += "\"temperature\":" + tempStr + ",";
-      json += "\"humidity\":" + humStr + ",";
-      json += "\"light_lux\":0,";
-      json += "\"moisture_1\":" + String(zones[0].moisture) + ",";
-      json += "\"pump\":" + String(pumpOn ? "true" : "false") + ",";
-      json += "\"fan\":" + String(fanOn ? "true" : "false") + ",";
-      json += "\"light\":" + String(lightOn ? "true" : "false");
-      json += "}";
+        String json = "{";
+        json += "\"hardware_id\":\"" + hardwareID + "\",";
+        json += "\"zone_id\":"       + String(zones[i].id) + ",";
+        json += "\"temperature\":"   + tempStr + ",";
+        json += "\"humidity\":"      + humStr  + ",";
+        json += "\"moisture_1\":"    + String(zones[i].moisture) + ",";
+        json += "\"pump\":"          + String(pumpOn  ? "true" : "false") + ",";
+        json += "\"fan\":"           + String(fanOn   ? "true" : "false") + ",";
+        json += "\"light\":"         + String(lightOn ? "true" : "false");
+        json += "}";
 
-      bool sent = webSocket.sendTXT(json);
-      if (sent) {
-        Serial.println("[WS] Data sent successfully → " + json);
-      } else {
-        Serial.println("[WS] Failed to send data (WebSocket not connected?)");
+        bool sent = webSocket.sendTXT(json);
+        Serial.printf("[WS] Zone %d → %s\n", zones[i].id, sent ? "sent" : "FAILED");
       }
 
     } else {
-      Serial.println("[WS] WiFi disconnected — skipping send");
+      Serial.println("[WS] Not connected — skipping send");
     }
 
     vTaskDelay(6000 / portTICK_PERIOD_MS);
   }
 }
 
-// ---------------- WEBSOCKET ----------------
-void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
+// ---------------- WEBSOCKET EVENT ----------------
+void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
-    case WStype_CONNECTED:
-      Serial.println("[WS] WebSocket connected to server");
-      break;
-    case WStype_DISCONNECTED:
-      Serial.println("[WS] WebSocket disconnected");
-      break;
-    case WStype_TEXT: {
-      String msg = (char*)payload;
-      Serial.println("[WS] Message received: " + msg);
+    case WStype_CONNECTED: {
+      Serial.println("[WS] Connected to server — sending discovery");
+
+      // Report hardware capabilities so the backend can auto-provision zones & sensors
+      String discovery = "{";
+      discovery += "\"type\":\"discovery\",";
+      discovery += "\"hardware_id\":\"" + hardwareID + "\",";
+      discovery += "\"zones\":"         + String(activeZones) + ",";
+      discovery += "\"has_dht\":true,";    // DHT11 for temp + humidity
+      discovery += "\"has_moisture\":true,";  // soil moisture sensors per zone
+      discovery += "\"has_light\":true";   // street light relay
+      discovery += "}";
+
+      webSocket.sendTXT(discovery);
       break;
     }
+
+    case WStype_DISCONNECTED:
+      Serial.println("[WS] Disconnected from server");
+      break;
+
+    case WStype_TEXT: {
+      String msg = String((char*)payload);
+      Serial.println("[WS] Server → " + msg);
+      break;
+    }
+
     default:
       break;
   }
@@ -261,42 +268,53 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
 // ---------------- SETUP ----------------
 void setup() {
   Serial.begin(115200);
-  Serial.println("\n[BOOT] Starting Smart Irrigation System...");
+  Serial.println("\n[BOOT] Starting Smart Farm System...");
 
-  pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(RED_LED_PIN, OUTPUT);
-  pinMode(FAN_RELAY, OUTPUT);
+  // Output pins
+  pinMode(BUZZER_PIN,  OUTPUT);  digitalWrite(BUZZER_PIN,  LOW);
+  pinMode(RED_LED_PIN, OUTPUT);  digitalWrite(RED_LED_PIN, LOW);
+  pinMode(FAN_RELAY,   OUTPUT);  digitalWrite(FAN_RELAY,   HIGH);  // HIGH = OFF for relay
+  pinMode(LIGHT_RELAY, OUTPUT);  digitalWrite(LIGHT_RELAY, HIGH);  // HIGH = OFF for relay
+
+  // Input pins
   pinMode(WATER_LEVEL_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_PIN,      INPUT_PULLUP);
 
+  // Zone pump pins — default OFF
   for (int i = 0; i < activeZones; i++) {
     pinMode(zones[i].pumpPin, OUTPUT);
     digitalWrite(zones[i].pumpPin, HIGH);
-    Serial.printf("[BOOT] Zone %d pump pin %d → OFF (default)\n", zones[i].id, zones[i].pumpPin);
+    Serial.printf("[BOOT] Zone %d pump (pin %d) → OFF\n", zones[i].id, zones[i].pumpPin);
   }
 
   dht.begin();
   Serial.println("[BOOT] DHT11 initialized");
 
-  // Force Station Mode just in case
+  // WiFi
   WiFi.mode(WIFI_STA);
-
   Serial.printf("[BOOT] Connecting to WiFi: %s\n", ssid);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-  Serial.println();
-  Serial.printf("[BOOT] WiFi connected — IP: %s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("\n[BOOT] WiFi connected — IP: %s\n", WiFi.localIP().toString().c_str());
 
-  // ✅ Grab the MAC Address here (this will not crash!)
+  // MAC address as hardware ID (kept with colons for readability)
   hardwareID = WiFi.macAddress();
-  Serial.println("[BOOT] Hardware ID (MAC): " + hardwareID);
+  Serial.println("[BOOT] Hardware ID: " + hardwareID);
 
-  Serial.printf("[BOOT] Connecting to WebSocket ws://%s:%d\n", ws_host, ws_port);
+  // NTP — needed for time-based light control
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  Serial.println("[BOOT] NTP time sync started");
+
+  // WebSocket
+  Serial.printf("[BOOT] Connecting to WebSocket ws://%s:%d/ws\n", ws_host, ws_port);
   webSocket.begin(ws_host, ws_port, "/ws");
   webSocket.onEvent(webSocketEvent);
+  webSocket.setReconnectInterval(5000);
 
+  // FreeRTOS tasks
   xTaskCreate(readSensorsTask,  "Sensors", 8000, NULL, 1, NULL);
   xTaskCreate(controlLogicTask, "Control", 4000, NULL, 1, NULL);
   xTaskCreate(sendDataTask,     "Sender",  4000, NULL, 1, NULL);

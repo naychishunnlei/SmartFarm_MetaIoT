@@ -34,6 +34,10 @@ export function initSensorWebSocket() {
             // Only process sensor broadcasts, not save confirmations
             if (data.status) return;
 
+            // Only process data for the farm we're currently viewing
+            const currentFarmId = parseInt(localStorage.getItem('selectedFarmId'));
+            if (data.farm_id && data.farm_id !== currentFarmId) return;
+
             // Farm-wide data
             latestFarmData = {
                 temperature: data.temperature,
@@ -43,8 +47,9 @@ export function initSensorWebSocket() {
                 tankLow:     data.tank_low,
             };
 
-            // Zone-specific data
-            latestZoneData[data.zone_id] = {
+            // Zone-specific data keyed by global_zone_id (matches obj.userData.zoneId)
+            const zoneKey = data.global_zone_id || data.zone_id;
+            latestZoneData[zoneKey] = {
                 moisture: data.moisture_1,
                 pumpOn:   data.pump,
             };

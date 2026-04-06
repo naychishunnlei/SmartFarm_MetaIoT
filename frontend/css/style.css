@@ -16,6 +16,17 @@
     --success-color: #2ecc71;
     --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.2);
+
+    /* Farmverse Brand Colors from map.html */
+    --leaf:      #3d6b4c;
+    --leaf-lite: #5ea374;
+    --leaf-glow: #7bc494;
+    --bg-main:   #2b4535;
+    --bg-panel:  #213629;
+    --mist:      rgba(255,255,255,0.06);
+    --border:    rgba(255,255,255,0.12);
+    --text:      #f5f2eb;
+    --text-dim:  #a3b8ad;
 }
 
 body {
@@ -89,6 +100,21 @@ body {
 .btn-primary {
     background-color: #fff;
     color: var(--primary-color);
+}
+
+.modal .btn-primary {
+    background: linear-gradient(135deg, var(--leaf), var(--leaf-glow));
+    color: #111;
+    font-weight: bold;
+    box-shadow: 0 4px 16px rgba(94, 163, 116, 0.25);
+    border: none;
+}
+
+.modal .btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(94, 163, 116, 0.4);
+    background: linear-gradient(135deg, var(--leaf), var(--leaf-glow));
+    color: #111;
 }
 
 .btn-primary[type="submit"] {
@@ -422,13 +448,15 @@ body {
 }
 
 .modal-content {
-    background-color: white;
+    background: var(--bg-panel);
+    color: var(--text);
     padding: 40px;
-    border-radius: 10px;
+    border-radius: 20px;
     box-shadow: var(--shadow-lg);
     max-width: 450px;
     width: 90%;
     animation: slideUp 0.3s ease;
+    border: 1px solid var(--border);
 }
 
 @keyframes slideUp {
@@ -450,7 +478,8 @@ body {
 }
 
 .modal-header h2 {
-    color: var(--dark-color);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
     font-size: 1.8rem;
     margin: 0;
 }
@@ -460,12 +489,12 @@ body {
     border: none;
     font-size: 1.8rem;
     cursor: pointer;
-    color: var(--gray-color);
+    color: var(--text-dim);
     transition: color 0.3s ease;
 }
 
 .modal-close:hover {
-    color: var(--dark-color);
+    color: #fff;
 }
 
 /* Forms */
@@ -482,28 +511,33 @@ body {
 }
 
 .form-group label {
-    font-weight: 600;
-    color: var(--dark-color);
-    font-size: 0.95rem;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 6px;
 }
 
 .form-group input[type="text"],
 .form-group input[type="email"],
 .form-group input[type="password"] {
-    padding: 12px 15px;
-    border: 1px solid var(--light-color);
-    border-radius: 5px;
-    font-family: 'Poppins', sans-serif;
-    font-size: 1rem;
-    transition: border-color 0.3s ease;
+    width: 100%;
+    background: rgba(0,0,0,.15);
+    border: 1.5px solid var(--border);
+    border-radius: 9px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    padding: 11px 14px;
+    outline: none;
+    transition: border-color .2s;
 }
 
 .form-group input[type="text"]:focus,
 .form-group input[type="email"]:focus,
 .form-group input[type="password"]:focus {
     outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 10px rgba(46, 204, 113, 0.1);
+    border-color: var(--leaf-lite);
 }
 
 .form-group.checkbox label {
@@ -511,6 +545,10 @@ body {
     align-items: center;
     gap: 10px;
     font-weight: 500;
+    text-transform: none;
+    font-size: 12px;
+    letter-spacing: normal;
+    color: var(--text-dim);
 }
 
 .form-group.checkbox input[type="checkbox"] {
@@ -550,12 +588,12 @@ body {
 
 .form-switch {
     text-align: center;
-    color: var(--gray-color);
+    color: var(--text-dim);
     font-size: 0.95rem;
 }
 
 .form-switch a {
-    color: var(--primary-color);
+    color: var(--leaf-lite);
     text-decoration: none;
     font-weight: 600;
     cursor: pointer;
@@ -563,7 +601,7 @@ body {
 }
 
 .form-switch a:hover {
-    color: var(--secondary-color);
+    color: var(--leaf-glow);
 }
 
 /* Responsive Design */

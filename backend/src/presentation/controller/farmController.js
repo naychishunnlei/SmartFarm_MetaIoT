@@ -4,8 +4,13 @@ import farmService from "../../service/farmService.js";
 class FarmController {
     async create(req, res) {
         try {
-            // 1. User context
-            const userId = 1; // Secure this via req.user.userId when auth is ready
+            // 1. User context - Now pulling securely from your auth token
+            const userId = req.user.userId; 
+            
+            if (!userId) {
+                return res.status(401).json({ error: 'Unauthorized: User ID not found' });
+            }
+
             const { name, location, hardware_id, latitude, longitude } = req.body;
 
             // Basic validation including map coordinates
@@ -59,18 +64,17 @@ class FarmController {
                     createdZones.push(newZone);
 
                     // AUTO-RENDER: Add 3D Moisture Probe (Matches 'moistureSensor' in objects.js)
-                    // Columns: farm_id, zone_id, object_name, category, position_x, position_y, position_z
                     await client.query(
-                        `INSERT INTO objects (farm_id, zone_id, object_name, category, position_x, position_y, position_z) 
-                         VALUES ($1, $2, $3, $4, $5, $6, $7)`, 
-                        [newFarm.id, newZone.id, 'moistureSensor', 'iot', (i * 3) - 3, 0, 0] 
+                        `INSERT INTO objects (farm_id, zone_id, object_name, category, position_x, position_y, position_z, metadata)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                        [newFarm.id, newZone.id, 'moistureSensor', 'iot', (i * 3) - 3, 0, 0, JSON.stringify({ is_running: false, sensor_value: 0 })]
                     );
 
                     // AUTO-RENDER: Add 3D Water Pump (Matches 'waterPump' in objects.js)
                     await client.query(
-                        `INSERT INTO objects (farm_id, zone_id, object_name, category, position_x, position_y, position_z) 
-                         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                        [newFarm.id, newZone.id, 'waterPump', 'iot', (i * 3) - 3, 0, 2]
+                        `INSERT INTO objects (farm_id, zone_id, object_name, category, position_x, position_y, position_z, metadata)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                        [newFarm.id, newZone.id, 'waterPump', 'iot', (i * 3) - 3, 0, 2, JSON.stringify({ is_running: false, sensor_value: 0 })]
                     );
                 }
 
@@ -78,22 +82,13 @@ class FarmController {
                 if (has_dht) {
                     // Matches 'tempSensor' in objects.js
                     await client.query(
-                        `INSERT INTO objects (farm_id, object_name, category, position_x, position_y, position_z) 
-                         VALUES ($1, $2, $3, $4, $5, $6)`, 
-                        [newFarm.id, 'tempSensor', 'iot', -4, 0, -4]
-                    );
-                }
-                
-                // Add street light if hardware has it (Matches 'streetLight' in objects.js)
-                if (has_light) {
-                    await client.query(
-                        `INSERT INTO objects (farm_id, object_name, category, position_x, position_y, position_z) 
-                         VALUES ($1, $2, $3, $4, $5, $6)`, 
-                        [newFarm.id, 'streetLight', 'iot', 4, 0, 4]
+                        `INSERT INTO objects (farm_id, object_name, category, position_x, position_y, position_z, metadata)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                        [newFarm.id, 'tempSensor', 'iot', -4, 0, -4, JSON.stringify({ is_running: false, sensor_value: 0 })]
                     );
                 }
 
-                await client.query('COMMIT');
+await client.query('COMMIT');
 
                 res.status(201).json({
                     message: 'Farm successfully claimed and 3D sensors auto-generated!',
@@ -131,6 +126,7 @@ class FarmController {
             const farms = await farmService.getFarmsByUserId(userId);
             res.status(200).json(farms);
         } catch (error) {
+            console.error("Error fetching farms:", error);
             res.status(500).json({ message: 'Failed to retrieve farms.' });
         }
     }

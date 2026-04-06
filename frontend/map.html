@@ -1,460 +1,1193 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Farm System - Thailand Map</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
-    <link
-        rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-        crossorigin=""
-    >
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: 'Poppins', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Farm System - Thailand Map</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 
-        .header {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-        }
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        .logo h1 {
-            color: white;
-            margin: 0;
-            font-size: 1.8rem;
-        }
+    :root {
+      /* Matching your Farmverse Brand Colors */
+      --leaf:      #3d6b4c;
+      --leaf-lite: #5ea374;
+      --leaf-glow: #7bc494;
+      --bg-main:   #2b4535; /* The solid green from your Facilities page */
+      --bg-panel:  #213629; /* A slightly darker green for the wizard panel to stand out */
+      --mist:      rgba(255,255,255,0.06);
+      --border:    rgba(255,255,255,0.12);
+      --text:      #f5f2eb; /* Matching the cream/off-white from your cards */
+      --text-dim:  #a3b8ad;
+      --danger:    #e76f51;
+      --ease:      cubic-bezier(.23,1,.32,1);
+    }
 
-        .map-container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem;
-            gap: 1rem;
-        }
+    body {
+      margin: 0; padding: 0;
+      font-family: 'Roboto Mono', monospace;
+      background: var(--bg-main); /* Using the solid brand green */
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+    }
 
-        .map-title {
-            color: white;
-            font-size: 2.5rem;
-            margin: 0;
-            text-align: center;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-        }
+    /* ── Header ── */
+    .header {
+      background: rgba(33, 54, 41, 0.4);
+      backdrop-filter: blur(10px);
+      padding: 1rem 2rem;
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid var(--border);
+      position: relative; z-index: 10;
+    }
+    .logo h1 { color: white; margin: 0; font-size: 1.8rem; font-family: 'Roboto', sans-serif; }
+    
+    /* ── Map area ── */
+    .map-container {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 2rem; gap: 1rem;
+      position: relative;
+    }
+    .map-title { color: white; font-size: 2.5rem; margin: 0; text-align: center; text-shadow: 2px 2px 4px rgba(0,0,0,.3); font-family: 'Roboto', sans-serif; }
 
-        #map {
-            width: min(90vw, 980px);
-            height: min(68vh, 680px);
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
-            border: 1px solid rgba(255, 255, 255, 0.35);
-        }
+    #map {
+      width: min(90vw, 980px); height: min(68vh, 680px);
+      border-radius: 16px; overflow: hidden;
+      box-shadow: 0 12px 30px rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.2);
+      cursor: crosshair; 
+    }
 
-        .map-status {
-            color: #ffffff;
-            font-size: 0.95rem;
-            text-align: center;
-            min-height: 1.4rem;
-        }
+    .map-status { color: #fff; font-size: 1.1rem; text-align: center; min-height: 1.4rem; font-weight: 500; background: rgba(0,0,0,0.25); padding: 8px 16px; border-radius: 8px;}
+    .map-status.error { color: #ffd1d1; background: rgba(231,111,81,0.2); }
+    .leaflet-popup-content { font-family: 'Roboto Mono', monospace; }
 
-        .map-status.error {
-            color: #ffd1d1;
-        }
+    .footer { text-align: center; padding: 1rem; color: rgba(255,255,255,.7); font-size: .9rem; }
 
-        .leaflet-popup-content {
-            font-family: 'Poppins', sans-serif;
-        }
+    /* ════════════════════════════════════════════════
+       FLOATING WIZARD PANEL
+    ════════════════════════════════════════════════ */
+    .wiz-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      opacity: 0; pointer-events: none;
+      transition: opacity .3s var(--ease);
+    }
+    .wiz-backdrop.open { opacity: 1; pointer-events: all; }
 
-        .map-actions {
-            display: flex;
-            gap: 0.5rem;
-        }
+    .wiz-panel {
+      position: fixed;
+      top: 50%; right: 0;
+      transform: translate(100%, -50%);
+      width: min(460px, 96vw);
+      max-height: 90vh;
+      overflow-y: auto;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 20px 0 0 20px;
+      box-shadow: -12px 0 60px rgba(0,0,0,.6);
+      z-index: 10000;
+      transition: transform .4s var(--ease);
+      padding: 28px 28px 24px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--leaf) transparent;
+      color: var(--text);
+    }
+    .wiz-panel.open { transform: translate(0, -50%); }
 
-        .map-action-btn {
-            border: none;
-            border-radius: 8px;
-            padding: 0.5rem 0.75rem;
-            cursor: pointer;
-            font-weight: 600;
-            background: #ffffff;
-            color: #333333;
-        }
+    /* atmosphere */
+    .wiz-panel::before {
+      content: '';
+      position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background:
+        radial-gradient(ellipse 80% 50% at 10% 0%, rgba(94, 163, 116, 0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 90% 100%, rgba(244, 162, 97, 0.05) 0%, transparent 60%);
+    }
 
-        .map-action-btn.active {
-            background: #ffd54f;
-        }
+    /* ── Panel header ── */
+    .panel-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 22px; position: relative;
+    }
+    .panel-logo {
+      width: 34px; height: 34px; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--leaf), var(--leaf-glow));
+      border-radius: 9px; display: flex; align-items: center; justify-content: center;
+      font-size: 16px; box-shadow: 0 0 14px rgba(94, 163, 116, 0.35);
+    }
+    .panel-brand { font-family: 'Roboto', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--leaf-lite); }
+    .panel-brand span { color: var(--text-dim); font-weight: 400; }
+    .panel-close {
+      margin-left: auto; background: none; border: none; cursor: pointer;
+      color: var(--text-dim); font-size: 18px; line-height: 1; padding: 4px;
+      border-radius: 6px; transition: color .2s, background .2s;
+    }
+    .panel-close:hover { color: #fff; background: var(--mist); }
 
-        .footer {
-            text-align: center;
-            padding: 1rem;
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 0.9rem;
-        }
-    </style>
-</head>
+    /* ── Progress rail ── */
+    .progress-wrap { margin-bottom: 24px; }
+    .progress-labels { display: flex; justify-content: space-between; margin-bottom: 10px; }
+    .prog-label {
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      font-size: 9px; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--text-dim); transition: color .3s var(--ease);
+    }
+    .prog-label .num {
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 1.5px solid currentColor;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 500;
+      transition: background .3s, border-color .3s, box-shadow .3s;
+    }
+    .prog-label.active  { color: var(--leaf-lite); }
+    .prog-label.active .num { background: var(--leaf); border-color: var(--leaf-glow); box-shadow: 0 0 10px rgba(94, 163, 116, 0.4); color: #fff; }
+    .prog-label.done    { color: var(--leaf); }
+    .prog-label.done .num { background: rgba(94, 163, 116, 0.3); color: var(--leaf-lite); }
+
+    .prog-track { height: 2px; background: var(--mist); border-radius: 2px; overflow: hidden; }
+    .prog-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--leaf), var(--leaf-glow));
+      border-radius: 2px;
+      transition: width .5s var(--ease);
+      box-shadow: 0 0 8px rgba(94, 163, 116, 0.5);
+    }
+
+    /* ── Step panels ── */
+    .step-panel { display: none; animation: stepIn .3s var(--ease) both; }
+    .step-panel.active { display: block; }
+    @keyframes stepIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+    .step-tag { font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--leaf-lite); margin-bottom: 6px; }
+    .step-title { font-family: 'Roboto', sans-serif; font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .step-desc { font-size: 12px; color: var(--text-dim); line-height: 1.6; margin-bottom: 18px; }
+
+    /* ── Cards / inputs ── */
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
+    .field input {
+      width: 100%;
+      background: rgba(0,0,0,.15);
+      border: 1.5px solid var(--border);
+      border-radius: 9px; color: var(--text);
+      font-family: 'Roboto Mono', monospace; font-size: 13px;
+      padding: 11px 14px; outline: none;
+      transition: border-color .2s;
+    }
+    .field input:focus { border-color: var(--leaf-lite); }
+    .field input::placeholder { color: var(--text-dim); }
+
+    .coord-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* ── Coord badge ── */
+    .coord-badge {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; border-radius: 9px;
+      background: rgba(94, 163, 116, 0.1);
+      border: 1px solid rgba(94, 163, 116, 0.2);
+      font-size: 12px; color: var(--leaf-lite);
+      margin-bottom: 16px;
+    }
+    .coord-badge .pin { font-size: 16px; }
+
+    /* ── Zone list ── */
+    .zone-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+    .zone-row {
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(0,0,0,.1); border: 1px solid var(--border);
+      border-radius: 9px; padding: 11px 14px;
+      transition: border-color .2s;
+    }
+    .zone-row:hover { border-color: rgba(94, 163, 116, 0.3); }
+    .zone-icon { width: 30px; height: 30px; background: rgba(94, 163, 116, 0.15); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+    .zone-name { font-family: 'Roboto', sans-serif; font-size: 13px; font-weight: 600; flex: 1; }
+    .zone-badge { font-size: 9px; padding: 2px 7px; border-radius: 20px; background: rgba(94, 163, 116, 0.2); color: var(--leaf-lite); border: 1px solid rgba(94, 163, 116, 0.3); }
+    .zone-empty { text-align: center; padding: 30px 16px; color: var(--text-dim); font-size: 12px; }
+    .zone-empty-icon { font-size: 30px; margin-bottom: 8px; }
+
+    /* ── Crop picker ── */
+    .zone-crop-block { margin-bottom: 16px; }
+    .zone-crop-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .zone-crop-label { font-family: 'Roboto', sans-serif; font-size: 12px; font-weight: 700; color: var(--text); }
+    .zone-crop-divider { flex: 1; height: 1px; background: var(--border); }
+
+    .crop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 7px; }
+    .crop-chip {
+      position: relative; display: flex; flex-direction: column; align-items: center;
+      gap: 4px; padding: 10px 6px 8px;
+      border-radius: 9px; border: 1.5px solid var(--border);
+      background: rgba(0,0,0,.15);
+      cursor: pointer; transition: all .2s var(--ease); user-select: none;
+    }
+    .crop-chip:hover { border-color: rgba(94, 163, 116, 0.4); background: rgba(94, 163, 116, 0.1); transform: translateY(-2px); }
+    .crop-chip.selected { border-color: var(--leaf-lite); background: rgba(94, 163, 116, 0.2); box-shadow: 0 0 12px rgba(94, 163, 116, 0.15); }
+    .crop-chip .emoji { font-size: 20px; line-height: 1; }
+    .crop-chip .crop-name { font-size: 8px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-dim); text-align: center; line-height: 1.2; }
+    .crop-chip.selected .crop-name { color: #fff; }
+    .crop-chip .check { position: absolute; top: 4px; right: 4px; width: 13px; height: 13px; background: var(--leaf-lite); border-radius: 50%; font-size: 7px; color: #111; display: none; align-items: center; justify-content: center; font-weight: bold;}
+    .crop-chip.selected .check { display: flex; }
+
+    .crop-qty { display: none; align-items: center; gap: 3px; margin-top: 3px; }
+    .crop-chip.selected .crop-qty { display: flex; }
+    .qty-btn {
+      width: 16px; height: 16px; border-radius: 4px;
+      background: rgba(94, 163, 116, 0.2); border: 1px solid rgba(94, 163, 116, 0.3);
+      color: var(--leaf-lite); font-size: 12px; line-height: 1;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: background .15s;
+    }
+    .qty-btn:hover { background: rgba(94, 163, 116, 0.4); color: #fff;}
+    .qty-display { font-size: 10px; min-width: 14px; text-align: center; color: var(--text); }
+
+    /* ── Summary ── */
+    .summary-zone-row {
+      display: flex; align-items: flex-start; gap: 12px;
+      background: rgba(0,0,0,.15); border: 1px solid var(--border);
+      border-radius: 9px; padding: 12px 14px; margin-bottom: 8px;
+    }
+    .summary-zone-icon { width: 28px; height: 28px; background: rgba(94, 163, 116, 0.15); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; margin-top: 2px; }
+    .summary-zone-name { font-family: 'Roboto', sans-serif; font-size: 12px; font-weight: 700; margin-bottom: 5px; }
+    .summary-crops { display: flex; flex-wrap: wrap; gap: 5px; }
+    .summary-crop-tag { font-size: 10px; padding: 2px 8px; border-radius: 20px; background: rgba(94, 163, 116, 0.15); border: 1px solid rgba(94, 163, 116, 0.3); color: var(--leaf-lite); }
+    .summary-none { font-size: 11px; color: var(--text-dim); font-style: italic; }
+
+    .gen-estimate {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px; border-radius: 9px;
+      background: rgba(94, 163, 116, 0.1); border: 1px solid rgba(94, 163, 116, 0.2);
+      margin-top: 14px; font-size: 12px; color: var(--text-dim);
+    }
+    .gen-estimate strong { color: #fff; }
+
+    /* ── State helpers ── */
+    .loading-state { display: flex; align-items: center; gap: 10px; padding: 16px 0; color: var(--text-dim); font-size: 12px; }
+    .spinner { width: 16px; height: 16px; border: 2px solid rgba(94, 163, 116, 0.2); border-top-color: var(--leaf-lite); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg { padding: 10px 14px; border-radius: 9px; background: rgba(231,111,81,.15); border: 1px solid rgba(231,111,81,.3); color: #ffb8a8; font-size: 12px; margin-top: 10px; }
+    .success-msg { padding: 10px 14px; border-radius: 9px; background: rgba(94, 163, 116, 0.2); border: 1px solid rgba(94, 163, 116, 0.4); color: var(--leaf-lite); font-size: 12px; margin-top: 10px; }
+
+    .btn-logout {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 10px 20px;
+        background-color: #b3541e; /* Red color for logout */
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-family: 'Roboto', sans-serif;
+        font-weight: 600;
+        z-index: 10001; /* High z-index to stay above the map */
+        box-shadow: 0 4px 15px rgba(0,0,0,0,2);
+        transition: all 0.3s ease;
+    }
+
+    .btn-logout:hover {
+        background-color: #8e4418; /* Deep Soil */
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+    /* Logout Modal Overlay */
+    .farmverse-modal-overlay {
+        display: none; /* Hidden by default */
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(4px); /* Blurs the map behind the modal */
+        z-index: 20000;
+        justify-content: center;
+        align-items: center;
+        animation: fadeIn 0.3s ease;
+    }
+
+    /* Modal Card */
+    .farmverse-modal-card {
+        background: #ffffff;
+        padding: 40px;
+        border-radius: 15px;
+        text-align: center;
+        max-width: 400px;
+        width: 90%;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        transform: translateY(0);
+        animation: slideIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .modal-icon { font-size: 3rem; margin-bottom: 15px; }
+    .farmverse-modal-card h2 { color: #2d5128; margin-bottom: 10px; font-family: 'Roboto', sans-serif; }
+    .farmverse-modal-card p { color: #666; margin-bottom: 30px; font-size: 0.95rem; }
+
+    /* Buttons */
+    .modal-buttons { display: flex; gap: 15px; justify-content: center; }
+
+    .btn-secondary {
+        background: #5d6d7e;
+        color: white;
+        border: none;
+        padding: 12px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        flex: 1;
+        transition: background 0.2s;
+    }
+
+    .btn-danger {
+        background: #b3541e;
+        color: white;
+        border: none;
+        padding: 12px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        flex: 1;
+        transition: background 0.2s;
+    }
+
+    .btn-secondary:hover { background: #7f8c8d; }
+    .btn-danger:hover { background: #8e4418; }
+
+    /* Animations */
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideIn { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    /* ── Footer nav ── */
+    .panel-footer {
+      display: flex; align-items: center; gap: 10px;
+      padding-top: 20px; margin-top: 4px;
+      border-top: 1px solid var(--border);
+    }
+    .btn {
+      font-family: 'DM Mono', monospace; font-size: 12px;
+      padding: 10px 20px; border-radius: 9px; border: none;
+      cursor: pointer; transition: all .2s var(--ease);
+      display: flex; align-items: center; gap: 6px; white-space: nowrap;
+    }
+    .btn:disabled { opacity: .4; cursor: not-allowed; transform: none !important; }
+    .btn-ghost { background: transparent; border: 1.5px solid var(--border); color: var(--text-dim); }
+    .btn-ghost:hover:not(:disabled) { border-color: rgba(255,255,255,.3); color: #fff; }
+    .btn-primary { background: linear-gradient(135deg, var(--leaf), var(--leaf-glow)); color: #111; font-weight: bold; box-shadow: 0 4px 16px rgba(94, 163, 116, 0.25); }
+    .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(94, 163, 116, 0.4); }
+    .spacer { flex: 1; }
+
+    /* ── Success state ── */
+    #success-view { display: none; text-align: center; padding: 32px 0 16px; }
+    #success-view .big-icon { font-size: 52px; margin-bottom: 16px; animation: popIn .5s var(--ease) both; }
+    @keyframes popIn { from { transform:scale(.4); opacity:0; } to { transform:scale(1); opacity:1; } }
+    #success-view h2 { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+    #success-view p { color: var(--text-dim); font-size: 12px; line-height: 1.6; margin-bottom: 22px; }
+  </style>
+  </head>
 <body>
-    <div class="header">
-        <div class="logo">
-            <h1>Farmverse</h1>
-        </div>
-        <div class="nav">
-            <div class="map-actions">
-                <button id="add-farm-mode-btn" class="map-action-btn" type="button">Add New Farm Location</button>
-            </div>
-        </div>
+
+  <div class="header">
+    <div class="logo"><h1>Farmverse</h1></div>
+    <button class="btn-logout" onclick="logout()">LOGOUT</button>
+  </div>
+
+  <div class="map-container">
+    <h1 class="map-title">Your Smart Farms</h1>
+    <div id="map-status" class="map-status">Loading farm coordinates...</div>
+    <div id="map" aria-label="Thailand farm map"></div>
+  </div>
+
+  <div class="footer">
+    <p>🌾 Smart Farm MetaIoT System — Choose your location to begin farming in the metaverse</p>
+  </div>
+
+  <div class="wiz-backdrop" id="wiz-backdrop"></div>
+
+  <div class="wiz-panel" id="wiz-panel" role="dialog" aria-modal="true" aria-label="Farm Setup Wizard">
+
+    <div class="panel-header">
+      <div class="panel-logo">🌱</div>
+      <div class="panel-brand">Farmverse <span>/ New Farm</span></div>
+      <button class="panel-close" id="wiz-close" aria-label="Close wizard">✕</button>
     </div>
 
-    <div class="map-container">
-        <h1 class="map-title">Select Your Farm Location</h1>
-        <div id="map" aria-label="Thailand farm map"></div>
-        <div id="map-status" class="map-status">Loading real farm coordinates from API...</div>
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-labels">
+        <div class="prog-label active" data-step="1"><div class="num">1</div><span>Setup</span></div>
+        <div class="prog-label"        data-step="2"><div class="num">2</div><span>Zones</span></div>
+        <div class="prog-label"        data-step="3"><div class="num">3</div><span>Crops</span></div>
+        <div class="prog-label"        data-step="4"><div class="num">4</div><span>Generate</span></div>
+      </div>
+      <div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
     </div>
 
-    <div class="footer">
-        <p>🌾 Smart Farm MetaIoT System - Choose your location to begin farming in the metaverse</p>
+    <div class="step-panel active" id="step-1">
+      <div class="step-tag">Step 01</div>
+      <div class="step-title">Identify Your Device</div>
+      <div class="step-desc">Enter your ESP32's MAC address to bind it to this location.</div>
+
+      <div class="field">
+        <label>Hardware ID (MAC Address)</label>
+        <input type="text" id="farm-hwid" placeholder="e.g. 24:DC:C3:44:27:14" maxlength="17" />
+      </div>
+
+      <div class="coord-badge">
+        <span class="pin">📍</span>
+        <span id="coord-display">Location selected.</span>
+      </div>
+
+      <div class="field">
+        <label>Farm name</label>
+        <input type="text" id="farm-name" placeholder="e.g. My Smart Greenhouse" maxlength="80" />
+      </div>
+      <div class="field">
+        <label>Location / description</label>
+        <input type="text" id="farm-location" placeholder="e.g. Chiang Rai" maxlength="180" />
+      </div>
+
+      <div id="step1-error" class="error-msg" style="display:none"></div>
     </div>
 
-    <script
-        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-        crossorigin=""
-    ></script>
-    <script type="module">
+    <div class="step-panel" id="step-2">
+      <div class="step-tag">Step 02</div>
+      <div class="step-title">Confirm zones</div>
+      <div class="step-desc">These zones were loaded from your database. Review them before assigning crops.</div>
 
-        import { getFarmsForUser, getOrCreateFarm, createFarm, deleteFarm } from './src/apiService.js'
+      <div id="zones-loading" class="loading-state" style="display:none"><div class="spinner"></div> Loading zones…</div>
+      <div id="zones-error"   class="error-msg"    style="display:none"></div>
+      <div class="zone-list"  id="zones-list"></div>
+    </div>
 
-        const THAILAND_BOUNDS = [
-            [5.5, 97.2],
-            [20.7, 106.2]
-        ];
+    <div class="step-panel" id="step-3">
+      <div class="step-tag">Step 03</div>
+      <div class="step-title">Assign crops</div>
+      <div class="step-desc">Pick what's planted in each zone. You can choose multiple crops and set quantities.</div>
+      <div id="crop-picker"></div>
+    </div>
 
-        const FARM_SEEDS = [
-            { label: 'Bangkok Farm', query: 'Bangkok, Thailand', desc: 'Central region smart farm' },
-            { label: 'Chiang Mai Farm', query: 'Chiang Mai, Thailand', desc: 'Northern mountain farm' },
-            { label: 'Phuket Farm', query: 'Phuket, Thailand', desc: 'Southern island farm' },
-            { label: 'Khon Kaen Farm', query: 'Khon Kaen, Thailand', desc: 'Northeast rice farm' },
-            { label: 'Ayutthaya Farm', query: 'Ayutthaya, Thailand', desc: 'Historical region farm' }
-        ];
+    <div class="step-panel" id="step-4">
+      <div class="step-tag">Step 04</div>
+      <div class="step-title">Generate farm</div>
+      <div class="step-desc">Review what will be created, then hit Generate to save to the database.</div>
+      <div id="summary-grid"></div>
+      <div class="gen-estimate">
+        <span>🌾</span>
+        <span><strong id="gen-count">0</strong> crop objects across <strong id="gen-zone-count">0</strong> zones.</span>
+      </div>
+      <div id="gen-error"   class="error-msg"    style="display:none"></div>
+      <div id="gen-success" class="success-msg"  style="display:none"></div>
+    </div>
 
-        const FALLBACK_COORDS = {
-            'Bangkok Farm': { lat: 13.7563, lon: 100.5018 },
-            'Chiang Mai Farm': { lat: 18.7883, lon: 98.9853 },
-            'Phuket Farm': { lat: 7.8804, lon: 98.3923 },
-            'Khon Kaen Farm': { lat: 16.4419, lon: 102.8350 },
-            'Ayutthaya Farm': { lat: 14.3532, lon: 100.5689 }
+    <div id="success-view">
+      <div class="big-icon">🎉</div>
+      <h2>Farm is ready!</h2>
+      <p>Your farm has been saved.<br>Launching the 3D world now…</p>
+      <button class="btn btn-primary" onclick="launchFarm()" style="margin:0 auto">🚜 Open Farm World</button>
+    </div>
+
+    <div class="panel-footer" id="panel-footer">
+      <button class="btn btn-ghost" id="btn-back"  onclick="wizBack()">← Back</button>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost" id="btn-cancel" onclick="closeWizard()">Cancel</button>
+      <button class="btn btn-primary" id="btn-next" onclick="wizNext()">Next →</button>
+    </div>
+
+  </div>
+  <div id="logout-modal" class="farmverse-modal-overlay">
+      <div class="farmverse-modal-card">
+          <div class="modal-icon">🚜</div>
+          <h2>Leaving the Farm?</h2>
+          <p>Are you sure you want to logout? Your farm layout and sensor data are safely synced to the cloud.</p>
+          
+          <div class="modal-buttons">
+              <button class="btn-secondary" onclick="closeLogoutModal()">Stay & Farm</button>
+              <button class="btn-danger" onclick="executeLogout()">Logout</button>
+          </div>
+      </div>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <script>
+      (async function protectRoute() {
+          const token = localStorage.getItem('farmverseToken');
+          if (!token) {
+              window.location.href = 'index.html';
+              return;
+          }
+
+          try {
+              const response = await fetch('http://localhost:5001/api/users/profile', {
+                  headers: { 'Authorization': `Bearer ${token}` }
+              });
+              
+              if (!response.ok) throw new Error('Session expired');
+              
+              const userData = await response.json();
+
+              if (!userData.has_avatar) {
+                  window.location.href = 'avatar.html';
+              }
+          } catch (err) {
+              console.error("Auth Check Failed:", err);
+              
+              // localStorage.removeItem('farmverseToken');
+              // localStorage.removeItem('farmverseUser');
+              
+              // window.location.href = 'index.html';
+          }
+      })();
+
+      function logout() {
+          document.getElementById('logout-modal').style.display = 'flex';
+      }
+
+      // 2. Closes the modal if user changes their mind
+      function closeLogoutModal() {
+          document.getElementById('logout-modal').style.display = 'none';
+      }
+
+      // 3. Actually performs the logout
+      function executeLogout() {
+          console.log("Cleaning up session...");
+          
+          // Clear LocalStorage
+          localStorage.removeItem('farmverseToken');
+          localStorage.removeItem('farmverseUser');
+          
+          // Redirect back to landing page
+          window.location.href = 'index.html';
+      }
+
+      // Optional: Close modal if user clicks outside the white card
+      window.onclick = function(event) {
+          const modal = document.getElementById('logout-modal');
+          if (event.target == modal) {
+              closeLogoutModal();
+          }
+      }
+  
+  </script>
+  <script type="module">
+    import { getFarmsForUser, getOrCreateFarm, createFarm, deleteFarm } from './src/apiService.js'
+
+    // ══════════════════════════════════════════════════════
+    //  CONFIG
+    // ══════════════════════════════════════════════════════
+    const API = 'http://localhost:5001/api';
+
+    const CROPS = [
+      { type: 'tomato',    name: 'Tomato',    emoji: '🍅' },
+      { type: 'carrot',    name: 'Carrot',    emoji: '🥕' },
+      { type: 'corn',      name: 'Corn',      emoji: '🌽' },
+      { type: 'wheat',     name: 'Wheat',     emoji: '🌾' },
+      { type: 'sunflower', name: 'Sunflower', emoji: '🌻' },
+      { type: 'cabbage',   name: 'Cabbage',   emoji: '🥬' },
+    ];
+
+    const ZONE_ICONS = ['🌿','🌱','🍃','🪴','🌾','🌻'];
+
+    const THAILAND_BOUNDS = [[5.5,97.2],[20.7,106.2]];
+
+    // ══════════════════════════════════════════════════════
+    //  WIZARD STATE
+    // ══════════════════════════════════════════════════════
+    let wizStep        = 1;
+    let pendingLat     = null;
+    let pendingLng     = null;
+    let createdFarm    = null;   
+    let zones          = [];
+    let cropSelections = {};     
+    let previewMarker  = null;
+
+    // ══════════════════════════════════════════════════════
+    //  MAP SETUP
+    // ══════════════════════════════════════════════════════
+    const mapStatus = document.getElementById('map-status');
+
+    const map = L.map('map', { minZoom:5, maxZoom:12 });
+    map.fitBounds(THAILAND_BOUNDS);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    L.rectangle(THAILAND_BOUNDS, { color:'#5cd65c', weight:1, fillOpacity:.05 }).addTo(map);
+
+    // 🌟 NEW: Create a layer group specifically for farm markers so we can wipe them on refresh
+    const markerGroup = L.featureGroup().addTo(map);
+
+    function setStatus(msg, isError = false) {
+      mapStatus.textContent = msg;
+      mapStatus.classList.toggle('error', isError);
+    }
+
+    function normalizeFarm(farm) {
+      return { ...farm, latitude: Number(farm.latitude), longitude: Number(farm.longitude) };
+    }
+
+    // ── Existing farm marker ──────────────────────────────
+    function addFarmMarker(farm) {
+      const marker = L.marker([farm.latitude, farm.longitude]).addTo(markerGroup);
+      const btnId  = `btn-farm-${farm.id}`;
+      const delId  = `del-farm-${farm.id}`;
+
+      marker.bindPopup(`
+        <strong>${farm.name}</strong><br>
+        ${farm.location || 'Custom farm location'}<br><br>
+        <button type="button" id="${btnId}" class="select-farm-btn">
+          Go to this farm
+        </button><br><br>
+        <button type="button" id="${delId}" class="select-farm-btn" style="background:#f44336;">Delete farm</button>
+      `);
+
+      marker.on('popupopen', () => {
+        document.getElementById(btnId).onclick = () => {
+          setStatus(`Redirecting to ${farm.name}…`);
+          // Save the selection and go to the 3D dashboard
+          localStorage.setItem('selectedFarmId', farm.id);
+          localStorage.setItem('selectedFarm', JSON.stringify(farm));
+          window.location.href = 'farm.html';
         };
-
-        const SEED_LABELS = new Set(FARM_SEEDS.map((s) => s.label));
-        const HIDDEN_SEEDS_KEY = 'farmverseHiddenSeedFarms';
-
-        function getHiddenSeedLabels() {
-            try {
-                const raw = localStorage.getItem(HIDDEN_SEEDS_KEY);
-                return raw ? JSON.parse(raw) : [];
-            } catch {
-                return [];
+        
+        document.getElementById(delId).onclick = async () => {
+          if (!confirm(`Are you sure you want to delete "${farm.name}"?`)) return;
+          try {
+            await deleteFarm(farm.id);
+            
+            // Clear local storage if they deleted the farm they were currently looking at
+            const sid = localStorage.getItem('selectedFarmId');
+            if (sid && Number(sid) === Number(farm.id)) {
+              localStorage.removeItem('selectedFarmId');
+              localStorage.removeItem('selectedFarm');
             }
+            
+            markerGroup.removeLayer(marker);
+            setStatus(`Removed ${farm.name}.`);
+          } catch(e) { 
+            setStatus(e.message, true); 
+          }
+        };
+      });
+    }
+
+    // ── Hidden seeds helpers ──────────────────────────────
+    function getHiddenSeedLabels() {
+      try { return JSON.parse(localStorage.getItem(HIDDEN_SEEDS_KEY) || '[]'); } catch { return []; }
+    }
+    function hideSeedFarmLabel(label) {
+      if (!SEED_LABELS.has(label)) return;
+      const s = new Set(getHiddenSeedLabels()); s.add(label);
+      localStorage.setItem(HIDDEN_SEEDS_KEY, JSON.stringify([...s]));
+    }
+
+    // ── Load farms ────────────────────────────────────────
+    async function loadAndDisplayFarms() {
+          setStatus('Loading your farms…');
+          markerGroup.clearLayers(); 
+
+          try {
+            let myFarms = [];
+            
+            try {
+              myFarms = await getFarmsForUser();
+            } catch (fetchErr) {
+              if (fetchErr.message.includes('404') || fetchErr.message.toLowerCase().includes('not found')) {
+                myFarms = [];
+              } else {
+                throw fetchErr; 
+              }
+            }
+
+            const farmsArray = Array.isArray(myFarms) ? myFarms : (myFarms.data || myFarms.farms || []);
+            const normalized = farmsArray.map(normalizeFarm);
+
+            // Plot ONLY the user's actual farms from the database
+            normalized.forEach(f => addFarmMarker(f));
+
+            if (normalized.length === 0) {
+              setStatus('No farms added yet. Click anywhere on the map to create a new farm!');
+              map.fitBounds(THAILAND_BOUNDS); // Stay zoomed out to show the whole country
+            } else {
+              setStatus('Choose an existing farm to monitor or click anywhere to create a new farm.');
+              
+              // Auto-zoom to fit all the user's farms on the screen
+              const userBounds = L.latLngBounds(normalized.map(f => [f.latitude, f.longitude]));
+              if (normalized.length === 1) {
+                map.setView([normalized[0].latitude, normalized[0].longitude], 9); 
+              } else {
+                map.fitBounds(userBounds, { padding: [50, 50] }); 
+              }
+            }
+
+          } catch(e) {
+            setStatus(`Error: ${e.message}`, true);
+            if (e.message.includes('not logged in') || e.message.includes('401')) {
+              setTimeout(() => window.location.href = 'index.html', 2000);
+            }
+          }
         }
 
-        function hideSeedFarmLabel(label) {
-            if (!SEED_LABELS.has(label)) return;
-            const set = new Set(getHiddenSeedLabels());
-            set.add(label);
-            localStorage.setItem(HIDDEN_SEEDS_KEY, JSON.stringify([...set]));
-        }
+    // ── Map Click to Add New Farm ─────────────────────────
+    function onMapClick(e) {
+      pendingLat = e.latlng.lat;
+      pendingLng = e.latlng.lng;
 
-        const mapStatus = document.getElementById('map-status');
-        const addFarmModeBtn = document.getElementById('add-farm-mode-btn');
-        let addFarmMode = false;
-        const map = L.map('map', {
-            minZoom: 5,
-            maxZoom: 12
+      const coordDisplay = document.getElementById('coord-display');
+      if (coordDisplay) {
+        coordDisplay.textContent = `lat ${pendingLat.toFixed(5)}, lng ${pendingLng.toFixed(5)}`;
+      }
+
+      if (previewMarker) map.removeLayer(previewMarker);
+      previewMarker = L.circleMarker([pendingLat, pendingLng], {
+        radius: 10, color: '#f4a261', fillColor: '#ffd54f',
+        fillOpacity: 1, weight: 3
+      }).addTo(map).bindPopup('📍 New Farm Location').openPopup();
+
+      if (!document.getElementById('wiz-panel').classList.contains('open')) {
+          openWizard();
+      }
+      
+      setStatus('Location set! Now enter your hardware ID and farm name.');
+    }
+
+    map.on('click', onMapClick);
+
+    // 🌟 FIX: Change from 'load' to 'pageshow' so hitting the browser back button forces a refresh
+    window.addEventListener('pageshow', (event) => {
+      if (!localStorage.getItem('farmverseToken')) {
+        setStatus('You must be logged in. Redirecting…', true);
+        setTimeout(() => window.location.href = 'index.html', 2500);
+      } else {
+        loadAndDisplayFarms();
+      }
+    });
+
+    // ══════════════════════════════════════════════════════
+    //  WIZARD OPEN / CLOSE
+    // ══════════════════════════════════════════════════════
+    function openWizard() {
+      wizStep        = 1;
+      createdFarm    = null;
+      zones          = [];
+      cropSelections = {};
+
+      document.getElementById('farm-name').value     = '';
+      document.getElementById('farm-hwid').value = '';
+      document.getElementById('farm-location').value = '';
+      document.getElementById('coord-display').textContent =
+        `lat ${pendingLat.toFixed(5)},  lng ${pendingLng.toFixed(5)}`;
+      document.getElementById('step1-error').style.display = 'none';
+      document.getElementById('success-view').style.display = 'none';
+      document.getElementById('progress-wrap').style.display = 'block';
+      document.getElementById('panel-footer').style.display  = 'flex';
+
+      showStep(1);
+      updateNav();
+      updateProgress();
+
+      document.getElementById('wiz-backdrop').classList.add('open');
+      document.getElementById('wiz-panel').classList.add('open');
+      document.getElementById('farm-name').focus();
+    }
+
+    window.closeWizard = function closeWizard() {
+      document.getElementById('wiz-backdrop').classList.remove('open');
+      document.getElementById('wiz-panel').classList.remove('open');
+      if (previewMarker) { map.removeLayer(previewMarker); previewMarker = null; }
+      setStatus('Choose an existing farm to monitor or click anywhere to create a new farm.');
+    }
+
+    document.getElementById('wiz-backdrop').addEventListener('click', closeWizard);
+    document.getElementById('wiz-close').addEventListener('click', closeWizard);
+
+    // ══════════════════════════════════════════════════════
+    //  API HELPERS
+    // ══════════════════════════════════════════════════════
+    function authHeaders() {
+      const token = localStorage.getItem('farmverseToken') || localStorage.getItem('token') || '';
+      return { 'Content-Type':'application/json', ...(token ? { Authorization:`Bearer ${token}` } : {}) };
+    }
+    async function apiFetch(path, opts = {}) {
+      const res = await fetch(`${API}${path}`, { headers: authHeaders(), ...opts });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || body.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  STEP 1 — Create farm in DB
+    // ══════════════════════════════════════════════════════
+    async function doCreateFarm() {
+      const hwid = document.getElementById('farm-hwid').value.trim();
+      const name = document.getElementById('farm-name').value.trim();
+      const location = document.getElementById('farm-location').value.trim();
+      const errEl = document.getElementById('step1-error');
+      errEl.style.display = 'none';
+
+      if (!hwid) { showFieldError(errEl, 'Please enter the MAC Address.'); return false; }
+      if (!pendingLat) { showFieldError(errEl, 'Please click a location on the map.'); return false; }
+      if (!name) { showFieldError(errEl, 'Please enter a farm name.'); return false; }
+
+      const btn = document.getElementById('btn-next');
+      btn.disabled = true; btn.textContent = '⏳ Claiming...';
+
+      try {
+        const res = await fetch(`${API}/farms/create`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ 
+                hardware_id: hwid, 
+                name, 
+                location, 
+                latitude: pendingLat, 
+                longitude: pendingLng 
+            })
         });
 
-        map.fitBounds(THAILAND_BOUNDS);
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || result.message);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
+        createdFarm = normalizeFarm(result.farm);
+        localStorage.setItem('selectedFarmId', createdFarm.id);
+        localStorage.setItem('selectedFarm', JSON.stringify(createdFarm));
+        
+        btn.disabled = false; btn.textContent = 'Next →';
+        return true;
+      } catch(e) {
+        showFieldError(errEl, e.message);
+        btn.disabled = false; btn.textContent = 'Next →';
+        return false;
+      }
+    }
 
-        L.rectangle(THAILAND_BOUNDS, {
-            color: '#5cd65c',
-            weight: 1,
-            fillOpacity: 0.05
-        }).addTo(map);
+    // ══════════════════════════════════════════════════════
+    //  STEP 2 — Load zones
+    // ══════════════════════════════════════════════════════
+    async function loadZones() {
+      const loadEl = document.getElementById('zones-loading');
+      const errEl  = document.getElementById('zones-error');
+      const list   = document.getElementById('zones-list');
 
-        function setStatus(message, isError = false) {
-            mapStatus.textContent = message;
-            mapStatus.classList.toggle('error', isError);
+      loadEl.style.display = 'flex'; errEl.style.display = 'none'; list.innerHTML = '';
+
+      try {
+        const data = await apiFetch(`/farms/${createdFarm.id}/zones`);
+        zones = Array.isArray(data) ? data : data.zones || data.data || [];
+        loadEl.style.display = 'none';
+
+        if (zones.length === 0) {
+          list.innerHTML = `<div class="zone-empty"><div class="zone-empty-icon">📭</div>No zones found for this farm.<br>Add zones to your database first.</div>`;
+          return;
         }
 
-        async function geocodeFarm(seed) {
-            const url = new URL('https://nominatim.openstreetmap.org/search');
-            url.searchParams.set('q', seed.query);
-            url.searchParams.set('format', 'jsonv2');
-            url.searchParams.set('limit', '1');
-            url.searchParams.set('countrycodes', 'th');
+        zones.forEach((z, i) => {
+          const row = document.createElement('div');
+          row.className = 'zone-row';
+          row.innerHTML = `
+            <div class="zone-icon">${ZONE_ICONS[i % ZONE_ICONS.length]}</div>
+            <div class="zone-name">${z.name || `Zone ${z.id}`}</div>
+            <div class="zone-badge">ID ${z.id}</div>
+          `;
+          list.appendChild(row);
+        });
+      } catch(e) {
+        loadEl.style.display = 'none';
+        errEl.style.display  = 'block';
+        errEl.textContent    = `Failed to load zones: ${e.message}`;
+      }
+    }
 
-            const response = await fetch(url.toString(), {
-                headers: {
-                    Accept: 'application/json'
-                }
+    // ══════════════════════════════════════════════════════
+    //  STEP 3 — Crop picker
+    // ══════════════════════════════════════════════════════
+    function renderCropPicker() {
+      const picker = document.getElementById('crop-picker');
+      picker.innerHTML = '';
+
+      if (zones.length === 0) {
+        picker.innerHTML = '<div class="zone-empty"><div class="zone-empty-icon">⚠️</div>No zones to assign crops to.</div>';
+        return;
+      }
+
+      zones.forEach((z, i) => {
+        const zid = z.id;
+        if (!cropSelections[zid]) cropSelections[zid] = {};
+
+        const block = document.createElement('div');
+        block.className = 'zone-crop-block';
+        block.innerHTML = `
+          <div class="zone-crop-header">
+            <span style="font-size:13px">${ZONE_ICONS[i % ZONE_ICONS.length]}</span>
+            <div class="zone-crop-label">${z.name || `Zone ${zid}`}</div>
+            <div class="zone-crop-divider"></div>
+          </div>
+          <div class="crop-grid" id="crop-grid-${zid}"></div>
+        `;
+        picker.appendChild(block);
+
+        const grid = block.querySelector(`#crop-grid-${zid}`);
+        CROPS.forEach(crop => {
+          const chip = document.createElement('div');
+          chip.className = 'crop-chip';
+          chip.dataset.zoneId   = zid;
+          chip.dataset.cropType = crop.type;
+          chip.innerHTML = `
+            <div class="check">✓</div>
+            <div class="emoji">${crop.emoji}</div>
+            <div class="crop-name">${crop.name}</div>
+            <div class="crop-qty">
+              <button class="qty-btn" onclick="changeQty(event,'${zid}','${crop.type}',-1)">−</button>
+              <div class="qty-display" id="qty-${zid}-${crop.type}">1</div>
+              <button class="qty-btn" onclick="changeQty(event,'${zid}','${crop.type}',+1)">+</button>
+            </div>
+          `;
+          chip.addEventListener('click', e => {
+            if (e.target.classList.contains('qty-btn')) return;
+            const sel = chip.classList.toggle('selected');
+            if (sel) {
+              cropSelections[zid][crop.type] = cropSelections[zid][crop.type] || 1;
+              document.getElementById(`qty-${zid}-${crop.type}`).textContent = cropSelections[zid][crop.type];
+            } else {
+              delete cropSelections[zid][crop.type];
+            }
+            updateNav();
+          });
+          if (cropSelections[zid][crop.type] > 0) chip.classList.add('selected');
+          grid.appendChild(chip);
+        });
+      });
+    }
+
+    window.changeQty = function(e, zoneId, cropType, delta) {
+      e.stopPropagation();
+      const cur  = cropSelections[zoneId]?.[cropType] || 1;
+      const next = Math.max(1, Math.min(20, cur + delta));
+      cropSelections[zoneId][cropType] = next;
+      const el = document.getElementById(`qty-${zoneId}-${cropType}`);
+      if (el) el.textContent = next;
+    };
+
+    function hasCropSelections() {
+      return zones.some(z => Object.keys(cropSelections[z.id] || {}).length > 0);
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  STEP 4 — Summary
+    // ══════════════════════════════════════════════════════
+    function renderSummary() {
+      const grid = document.getElementById('summary-grid');
+      grid.innerHTML = '';
+      let total = 0, zonesWithCrops = 0;
+
+      zones.forEach((z, i) => {
+        const entries  = Object.entries(cropSelections[z.id] || {});
+        const zTotal   = entries.reduce((s, [,q]) => s + q, 0);
+        total         += zTotal;
+        if (zTotal > 0) zonesWithCrops++;
+
+        const row = document.createElement('div');
+        row.className = 'summary-zone-row';
+        const cropsHtml = entries.length > 0
+          ? entries.map(([type, qty]) => {
+              const c = CROPS.find(x => x.type === type);
+              return `<span class="summary-crop-tag">${c?.emoji||''} ${c?.name||type} ×${qty}</span>`;
+            }).join('')
+          : '<span class="summary-none">No crops assigned</span>';
+
+        row.innerHTML = `
+          <div class="summary-zone-icon">${ZONE_ICONS[i % ZONE_ICONS.length]}</div>
+          <div>
+            <div class="summary-zone-name">${z.name || `Zone ${z.id}`}</div>
+            <div class="summary-crops">${cropsHtml}</div>
+          </div>
+        `;
+        grid.appendChild(row);
+      });
+
+      document.getElementById('gen-count').textContent      = total;
+      document.getElementById('gen-zone-count').textContent = zonesWithCrops;
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  GENERATE — save objects to DB
+    // ══════════════════════════════════════════════════════
+    async function generateFarm() {
+      const errEl = document.getElementById('gen-error');
+      const btn   = document.getElementById('btn-next');
+      errEl.style.display = 'none';
+      btn.disabled = true; btn.textContent = '⏳ Saving…';
+
+      const objectsToCreate = [];
+      
+      // 1. Define the centers of our 3 strips within the 16x16 bed
+      // Total width is 16 (-8 to +8). Each strip is 5.33 wide.
+      const zoneXCenters = [-5.33, 0, 5.33]; 
+
+          try {
+            // NEW: Check Hardware Registry to see how many zones exist for this device
+            // Assuming you have an endpoint for this, or you can just use the 'zones' array 
+            // if your 'zones' variable was already populated by the discovery handshake.
+            const hardwareZoneCount = zones.length; 
+
+            zones.forEach((z, index) => {
+                // Only create objects for zones that the hardware actually reported
+                if (index >= hardwareZoneCount) return;
+
+                const centerX = zoneXCenters[index];
+
+                // 2. Add the Soil Moisture Sensor for THIS zone
+                objectsToCreate.push({
+                    farm_id: createdFarm.id,
+                    zone_id: z.id,
+                    object_name: 'moistureSensor',
+                    category: 'iot',
+                    position_x: centerX + 1.2, // Offset to the right
+                    position_y: 0.1,
+                    position_z: 1.2,
+                    metadata: { sensor_type: 'capacitive' }
+                });
+
+                // 3. Add the Water Pump for THIS zone
+                objectsToCreate.push({
+                    farm_id: createdFarm.id,
+                    zone_id: z.id,
+                    object_name: 'waterPump',
+                    category: 'iot',
+                    position_x: centerX - 1.2, // Offset to the left
+                    position_y: 0.1,
+                    position_z: 1.2,
+                    metadata: { pin: z.pumpPin } 
+                });
+
+                // 4. Add the Crops for THIS zone
+                Object.entries(cropSelections[z.id] || {}).forEach(([cropType, qty]) => {
+                    for (let i = 0; i < qty; i++) {
+                        objectsToCreate.push({
+                            farm_id: createdFarm.id,
+                            zone_id: z.id,
+                            object_name: cropType,
+                            category: 'crops',
+                            position_x: centerX + ((i % 2) * 1.8 - 0.9),
+                            position_y: 0.2,
+                            position_z: (Math.floor(i / 2) * 1.5) - 3,
+                            growth: 0.2
+                        });
+                    }
+                });
             });
 
-            if (!response.ok) {
-                throw new Error(`Geocode failed with status ${response.status}`);
-            }
+            // 5. Batch save to database
+            await Promise.all(
+                objectsToCreate.map(obj =>
+                    apiFetch(`/farms/${createdFarm.id}/objects`, { 
+                        method:'POST', 
+                        body:JSON.stringify(obj) 
+                    })
+                )
+            );
 
-            const results = await response.json();
-            if (!results.length) {
-                throw new Error(`No result for ${seed.query}`);
-            }
+            // Success UI logic...
+            document.getElementById('success-view').style.display = 'block';
 
-            return {
-                ...seed,
-                lat: Number(results[0].lat),
-                lon: Number(results[0].lon)
-            };
+        } catch(e) {
+            console.error("Generation Error:", e);
+            errEl.textContent = `Failed to save: ${e.message}`;
+            btn.disabled = false;
         }
+    }
+    
+    window.launchFarm = function() {
+      window.location.href = 'farm.html';
+    };
 
-        function buildFarmRecord(seed, coords) {
-            return {
-                name: seed.label,
-                desc: seed.desc,
-                lat: coords.lat,
-                lon: coords.lon
-            };
-        }
+    // ══════════════════════════════════════════════════════
+    //  NAVIGATION
+    // ══════════════════════════════════════════════════════
+    window.wizNext = async function() {
+      if (wizStep === 1) {
+        const ok = await doCreateFarm();
+        if (!ok) return;
+        wizStep = 2;
+        await loadZones();
+      } else if (wizStep === 2) {
+        if (zones.length === 0) return;
+        wizStep = 3;
+        renderCropPicker();
+      } else if (wizStep === 3) {
+        if (!hasCropSelections()) return;
+        wizStep = 4;
+        renderSummary();
+      } else if (wizStep === 4) {
+        await generateFarm();
+        return;
+      }
+      showStep(wizStep);
+      updateNav();
+      updateProgress();
+    };
 
-        function normalizeFarmRecord(farm) {
-            return {
-                ...farm,
-                latitude: Number(farm.latitude),
-                longitude: Number(farm.longitude)
-            };
-        }
+    window.wizBack = function() {
+      if (wizStep <= 1) { closeWizard(); return; }
+      wizStep--;
+      showStep(wizStep);
+      updateNav();
+      updateProgress();
+    };
 
-        function addFarmMarker(farmSeed, existingFarm = null) {
-            const { label, desc } = farmSeed;
-            const coords = existingFarm ? { lat: existingFarm.latitude, lon: existingFarm.longitude } : FALLBACK_COORDS[label];
-            
-            const marker = L.marker([coords.lat, coords.lon]).addTo(map);
-            
-            // Create a unique ID or class for the button to avoid selection issues
-            const btnId = `btn-${label.replace(/\s+/g, '-')}`;
-            
-            const deleteBtnId = `delete-${label.replace(/\s+/g, '-')}-${existingFarm ? existingFarm.id : 'seed'}`;
-            let popupContent = `
-                <strong>${label} ${existingFarm ? '(My Farm)' : ''}</strong><br>
-                ${desc}<br><br>
-                <button type="button" id="${btnId}" class="select-farm-btn">
-                    ${existingFarm ? 'Go to this farm' : 'Select this location'}
-                </button>
-                <br><br>
-                <button type="button" id="${deleteBtnId}" class="select-farm-btn" style="background:#f44336;">Delete farm</button>
-            `;
-            
-            marker.bindPopup(popupContent);
+    function showStep(n) {
+      document.querySelectorAll('.step-panel').forEach(p => {
+        p.style.display = '';
+        p.classList.remove('active');
+      });
+      const panel = document.getElementById(`step-${n}`);
+      if (panel) panel.classList.add('active');
+    }
 
-            marker.on('popupopen', () => {
-                const button = document.getElementById(btnId);
-                const deleteButton = document.getElementById(deleteBtnId);
+    function updateProgress() {
+      const pct = ((wizStep - 1) / 3) * 100;
+      document.getElementById('prog-fill').style.width = `${pct}%`;
+      document.querySelectorAll('.prog-label').forEach(el => {
+        const s = parseInt(el.dataset.step);
+        el.classList.remove('active','done');
+        if (s === wizStep) el.classList.add('active');
+        else if (s < wizStep) el.classList.add('done');
+      });
+    }
 
-                button.onclick = async () => {
-                    setStatus(`Processing ${label}...`);
-                    try {
-                        let farmFromDb;
-                        if (existingFarm) {
-                            farmFromDb = existingFarm;
-                        } else {
-                            // Pass the 'desc' as the 'location' field
-                            farmFromDb = await getOrCreateFarm({ 
-                                name: label, 
-                                lat: coords.lat, 
-                                lon: coords.lon,
-                                location: desc // This maps to the 'desc' in your FARM_SEEDS array
-                            });
-                        }
+    function updateNav() {
+      const back = document.getElementById('btn-back');
+      const next = document.getElementById('btn-next');
+      back.style.visibility = wizStep === 1 ? 'hidden' : 'visible';
 
-                        localStorage.setItem('selectedFarmId', farmFromDb.id);
-                        localStorage.setItem('selectedFarm', JSON.stringify(farmFromDb));
+      if (wizStep === 4) {
+        next.textContent = '🌱 Generate';
+        next.disabled    = false;
+      } else {
+        next.textContent = 'Next →';
+        next.disabled    = !canProceed();
+      }
+    }
 
-                        setStatus('Redirecting to your 3D farm...');
-                        window.location.href = 'farm.html';
-                    } catch (error) {
-                        console.error('Failed to process farm:', error);
-                        setStatus(error.message, true);
-                    }
-                };
+    function canProceed() {
+      if (wizStep === 1) return true; // validation runs on click
+      if (wizStep === 2) return zones.length > 0;
+      if (wizStep === 3) return hasCropSelections();
+      return true;
+    }
 
-                deleteButton.onclick = async () => {
-                    const msg = existingFarm
-                        ? `Delete "${label}"? This removes all objects in this farm from the server.`
-                        : `Remove "${label}" from the map? (Preset locations stay hidden until you clear browser data.)`;
-                    if (!confirm(msg)) return;
+    function showFieldError(el, msg) {
+      el.style.display = 'block';
+      el.textContent   = msg;
+    }
 
-                    try {
-                        if (existingFarm) {
-                            await deleteFarm(existingFarm.id);
-                            const selectedFarmId = localStorage.getItem('selectedFarmId');
-                            if (selectedFarmId && Number(selectedFarmId) === Number(existingFarm.id)) {
-                                localStorage.removeItem('selectedFarmId');
-                                localStorage.removeItem('selectedFarm');
-                            }
-                        }
-                        hideSeedFarmLabel(label);
-                        map.removeLayer(marker);
-                        setStatus(`Removed ${label}.`);
-                    } catch (error) {
-                        console.error('Failed to delete farm:', error);
-                        setStatus(error.message, true);
-                    }
-                };
-            });
-        }
-
-        async function addCustomFarmAt(latlng) {
-            const name = prompt('Enter a name for the new farm location:');
-            if (!name) return;
-
-            const location = prompt('Enter short location/description:', 'Custom farm location') || 'Custom farm location';
-
-            setStatus('Creating your new farm...');
-            try {
-                const createdFarm = await createFarm({
-                    name: name.trim(),
-                    lat: latlng.lat,
-                    lon: latlng.lng,
-                    location: location.trim()
-                });
-
-                const normalizedFarm = normalizeFarmRecord(createdFarm);
-                addFarmMarker(
-                    { label: normalizedFarm.name, desc: normalizedFarm.location || 'Custom farm location' },
-                    normalizedFarm
-                );
-
-                setStatus(`Created "${normalizedFarm.name}". Click its marker to enter the farm.`);
-            } catch (error) {
-                console.error('Failed to create farm:', error);
-                setStatus(error.message, true);
-            }
-        }
-         async function loadAndDisplayFarms() {
-            setStatus('Loading your farms...');
-            try {
-                // 4. Use the imported getFarmsForUser function
-                const myFarms = await getFarmsForUser();
-                const normalizedFarms = myFarms.map(normalizeFarmRecord);
-                const existingNames = new Set(normalizedFarms.map((farm) => farm.name));
-                const hiddenSeeds = new Set(getHiddenSeedLabels());
-
-                // Render all farms that already exist in DB (including custom ones)
-                normalizedFarms.forEach((farm) => {
-                    addFarmMarker(
-                        {
-                            label: farm.name,
-                            desc: farm.location || 'Custom farm location'
-                        },
-                        farm
-                    );
-                });
-
-                // Render default seeds that user has not created yet and has not removed from map
-                FARM_SEEDS.forEach((seed) => {
-                    if (!existingNames.has(seed.label) && !hiddenSeeds.has(seed.label)) {
-                        addFarmMarker(seed, null);
-                    }
-                });
-
-                setStatus('Select a farm location or go to one of your existing farms.');
-
-            } catch (error) {
-                console.error('Failed to load farms:', error);
-                setStatus(error.message, true);
-                 if (error.message.includes('not logged in')) {
-                    setTimeout(() => window.location.href = 'index.html', 2000);
-                }
-            }
-        }
-
-        window.addEventListener('load', () => {
-            if (!localStorage.getItem('farmverseToken')) {
-                setStatus('You must be logged in. Redirecting...', true);
-                setTimeout(() => { window.location.href = 'index.html'; }, 2500);
-            } else {
-                loadAndDisplayFarms();
-            }
-        });
-
-        addFarmModeBtn.addEventListener('click', () => {
-            addFarmMode = !addFarmMode;
-            addFarmModeBtn.classList.toggle('active', addFarmMode);
-
-            if (addFarmMode) {
-                setStatus('Add mode enabled: click on map to create a new farm location.');
-            } else {
-                setStatus('Select a farm location or go to one of your existing farms.');
-            }
-        });
-
-        map.on('click', (event) => {
-            if (!addFarmMode) return;
-            addCustomFarmAt(event.latlng);
-        });
-
-        // async function loadRealFarmMarkers() {
-        //     const farms = [];
-        //     for (const seed of FARM_SEEDS) {
-        //         try {
-        //             const resolved = await geocodeFarm(seed);
-        //             const farm = buildFarmRecord(seed, { lat: resolved.lat, lon: resolved.lon });
-        //             farms.push({ farm, source: 'API' });
-        //             await new Promise((resolve) => setTimeout(resolve, 1100));
-        //         } catch (error) {
-        //             const fallback = FALLBACK_COORDS[seed.label];
-        //             if (fallback) {
-        //                 farms.push({ farm: buildFarmRecord(seed, fallback), source: 'fallback' });
-        //             }
-        //         }
-        //     }
-
-        //     if (!farms.length) {
-        //         setStatus('Unable to load farm locations.', true);
-        //         return;
-        //     }
-
-        //     farms.forEach(({ farm, source }) => addFarmMarker(farm, source));
-
-        //     const allApi = farms.every((item) => item.source === 'API');
-        //     if (allApi) {
-        //         setStatus('Loaded real farm coordinates from API.');
-        //     } else {
-        //         setStatus('Loaded farm coordinates (some used fallback when API was unavailable).');
-        //     }
-        // }
-
-        // loadRealFarmMarkers().catch(() => {
-        //     setStatus('Unexpected error while loading farm locations.', true);
-        // });
-    </script>
+  </script>
 </body>
 </html>

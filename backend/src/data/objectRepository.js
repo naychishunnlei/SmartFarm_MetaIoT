@@ -45,18 +45,12 @@ class ObjectRepository {
     }
 
     async updateGrowth(id, growth) {
-        const query = `UPDATE objects 
-            SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('growth', $1::numeric), 
-                updated_at = NOW() 
-            WHERE id = $2 
+        const query = `UPDATE objects
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('growth', $1::numeric),
+                updated_at = NOW()
+            WHERE id = $2
             RETURNING *;`
         const result = await pool.query(query, [growth, id])
-        const logQuery = `
-            INSERT INTO sensor_logs (object_id, sensor_type, value)
-            VALUES ($1, 'growth', $2);
-        `
-        await pool.query(logQuery, [id, growth])
-
         return result.rows[0]
     }
 
@@ -74,29 +68,12 @@ class ObjectRepository {
 
     async updateSensorValue(id, value) {
         const query = `
-            UPDATE objects 
-            SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('sensor_value', $1::numeric), 
-                updated_at = NOW() 
-            WHERE id = $2 
+            UPDATE objects
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('sensor_value', $1::numeric),
+                updated_at = NOW()
+            WHERE id = $2
             RETURNING *;`
         const result = await pool.query(query, [value, id])
-        if (result.rows.length > 0) {
-            const updatedObject = result.rows[0];
-            
-            // Determine the right sensor_type string based on the 3D model's name
-            let sensorType = 'unknown';
-            if (updatedObject.object_name === 'moistureSensor') sensorType = 'moisture';
-            else if (updatedObject.object_name === 'tempSensor') sensorType = 'temperature';
-            else if (updatedObject.object_name === 'humiditySensor') sensorType = 'humidity';
-            
-            // Insert the dynamically named historical record
-            const logQuery = `
-                INSERT INTO sensor_logs (object_id, sensor_type, value) 
-                VALUES ($1, $2, $3);
-            `
-            await pool.query(logQuery, [id, sensorType, value])
-        }
-
         return result.rows[0]
     }
 

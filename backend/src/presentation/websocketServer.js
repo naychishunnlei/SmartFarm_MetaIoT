@@ -8,7 +8,7 @@ const requiredFields = [
     'zone_id', 
     'temperature', 
     'humidity', 
-    'light_lux', 
+    //'light_lux', 
     'moisture_1', 
     'pump', 
     'fan', 
@@ -65,10 +65,16 @@ export default function initWebSocket(server) {
                 const saved = await sensorRepository.saveSensorData(data)
                 ws.send(JSON.stringify({ status: 'saved', farm_log_id: saved.farm_log_id, zone_log_id: saved.zone_log_id }))
 
-                // 4. Broadcast to frontend clients
+                // 4. Broadcast to frontend clients, enriched with farm_id and global_zone_id
+                // so the frontend can match data to the correct farm and zone objects
+                const broadcast = JSON.stringify({
+                    ...data,
+                    farm_id: saved.farm_id,
+                    global_zone_id: saved.global_zone_id
+                })
                 wss.clients.forEach((client) => {
                     if (client !== ws && client.readyState === WebSocket.OPEN) {
-                        client.send(message.toString())
+                        client.send(broadcast)
                     }
                 })
             } catch (error) {

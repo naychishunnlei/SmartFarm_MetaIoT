@@ -1,4 +1,4 @@
-import { createObject, deleteAllObjects, deleteObject, toggleDevice, updateObjectPosition } from "./apiService";
+import { createObject, deleteAllObjects, deleteObject, getZonesForFarm, toggleDevice, updateObjectPosition } from "./apiService";
 import { createObject as createObjectMesh } from "./objects";
 import { handleSensorClick } from "./sensorOverlay";
 
@@ -265,6 +265,141 @@ export function setupEventListeners(context) {
         contextMenuTarget = null;
     }
 
+    // Zone selector for IoT devices
+    async function showZoneSelectorModal(objectType, point) {
+        const farmId = localStorage.getItem('selectedFarmId');
+
+        try {
+            const zones = await getZonesForFarm(farmId);
+
+            // Create modal overlay
+            const overlay = document.createElement('div');
+            overlay.id = 'zone-selector-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            `;
+
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                background: #151522;
+                padding: 30px;
+                border-radius: 15px;
+                border: 2px solid #7c6df9;
+                text-align: center;
+                color: white;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                max-width: 400px;
+                z-index: 1001;
+            `;
+
+            modal.innerHTML = `
+                <h3 style="color: #7c6df9; margin-bottom: 20px;">Select Zone for ${objectConfigs[objectType]?.name || objectType}</h3>
+                <div id="zone-buttons" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px;">
+                </div>
+                <button id="cancel-zone-btn" style="
+                    padding: 10px 20px;
+                    background: #555;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-size: 14px;
+                ">Cancel</button>
+            `;
+
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            // Add zone buttons
+            const zoneButtonsContainer = modal.querySelector('#zone-buttons');
+            zones.forEach(zone => {
+                const btn = document.createElement('button');
+                btn.textContent = zone.name;
+                btn.style.cssText = `
+                    padding: 10px 15px;
+                    background: #7c6df9;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: background 0.2s;
+                `;
+                btn.onmouseover = () => btn.style.background = '#9a8fff';
+                btn.onmouseout = () => btn.style.background = '#7c6df9';
+
+                btn.addEventListener('click', async () => {
+                    overlay.remove();
+                    await placeObjectInZone(objectType, point, zone.id);
+                });
+
+                zoneButtonsContainer.appendChild(btn);
+            });
+
+            // Cancel button
+            modal.querySelector('#cancel-zone-btn').addEventListener('click', () => {
+                overlay.remove();
+                deselectAllObjects();
+            });
+
+        } catch (error) {
+            console.error('Failed to load zones:', error);
+            alert('Error loading zones. Please try again.');
+            deselectAllObjects();
+        }
+    }
+
+    // Place object in specific zone
+    async function placeObjectInZone(objectType, point, zoneId) {
+        try {
+            const farmId = localStorage.getItem('selectedFarmId');
+            const category = objectConfigs[objectType]?.category || 'unknown';
+
+            const metadata = {};
+            if (category === 'iot') {
+                metadata.is_running = false;
+                metadata.sensor_value = 0;
+            } else if (category === 'crops') {
+                metadata.growth = 0.4;
+            }
+
+            const objectData = {
+                object_name: objectType,
+                category: category,
+                position_x: point.x,
+                position_y: point.y,
+                position_z: point.z,
+                metadata: metadata
+            };
+
+            // Only add zone_id if provided
+            if (zoneId !== null) {
+                objectData.zone_id = zoneId;
+            }
+
+            const newDbObject = await createObject(farmId, objectData);
+            console.log('Object saved to DB:', newDbObject);
+
+            addObject(scene, objectsRef, newDbObject.object_name, point, newDbObject, objectConfigs);
+
+            updateObjectCount();
+            deselectAllObjects();
+            window.updateFarmDashboard?.();
+        } catch (error) {
+            console.error('Failed to create object:', error);
+            alert(`Error creating object: ${error.message}`);
+        }
+    }
+
     function onWindowResize() {
         const width = window.innerWidth;
         const height = window.innerHeight;
@@ -326,42 +461,18 @@ export function setupEventListeners(context) {
 
 
                 if (Math.abs(point.x) < 40 && Math.abs(point.z) < 40) {
-                    const farmId = localStorage.getItem('selectedFarmId')
                     const category = objectConfigs[selectedObjectType]?.category || 'unknown';
 
-                    const metadata = {};
-                    if (category === 'iot') {
-                        metadata.is_running = false;
-                        metadata.sensor_value = 0; 
-                    } else if (category === 'crops') {
-                        metadata.growth = 0.4;
+                    // IoT devices (except tempSensor, fan, streetLight which are farm-wide) need zone selection
+                    const ZONE_REQUIRED_TYPES = new Set(['moistureSensor', 'sprinkler', 'waterPump']);
+
+                    if (category === 'iot' && ZONE_REQUIRED_TYPES.has(selectedObjectType)) {
+                        // Show zone selector for zone-based IoT devices
+                        showZoneSelectorModal(selectedObjectType, point);
+                    } else {
+                        // For non-IoT or farm-wide IoT devices, create immediately
+                        placeObjectInZone(selectedObjectType, point, null);  // null zone_id for farm-wide objects
                     }
-
-                    const objectData = { 
-                        object_name: selectedObjectType,
-                        category: objectConfigs[selectedObjectType]?.category || 'unknown',
-                        position_x: point.x,
-                        position_y: point.y,
-                        position_z: point.z,
-                        metadata: metadata
-                     }
-
-                    createObject(farmId, objectData)
-                        .then(newDbObject => {
-                            console.log('Object saved to DB:', newDbObject);
-                            
-                            addObject(scene, objectsRef, newDbObject.object_name, point, newDbObject, objectConfigs);
-                            
-                            updateObjectCount();
-                            deselectAllObjects();
-                            window.updateFarmDashboard?.()
-                        })
-                        .catch(error => {
-                            console.error('Failed to create object:', error);
-                            alert(`Error creating object: ${error.message}`);
-                        });
-                
-
                 }
             }
         } else {
@@ -377,7 +488,7 @@ export function setupEventListeners(context) {
             if (intersects.length > 0) {
                 const clickedObject = findParentGroup(intersects[0].object);
                 if (clickedObject) {
-                    handleSensorClick(intersects);
+                    handleSensorClick(clickedObject);
                     showContextMenu(event.clientX, event.clientY, clickedObject);
                 }
             } else {

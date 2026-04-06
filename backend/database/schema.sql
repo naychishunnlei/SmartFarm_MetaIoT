@@ -16,7 +16,8 @@ CREATE TABLE farms (
     location VARCHAR(255) NOT NULL,
     latitude DECIMAL(10, 8),
     longitude DECIMAL(11, 8),
-    area DECIMAL(10, 2)
+    area DECIMAL(10, 2),
+    hardware_id VARCHAR(50) NOT NULL
 );
 
 -- Zones Table (NEW)

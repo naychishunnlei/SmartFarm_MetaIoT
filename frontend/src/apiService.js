@@ -4,10 +4,12 @@ async function request(endpoint, method = 'GET', data = null) {
     const url = `${API_BASE_URL}${endpoint}`;
     const token = localStorage.getItem('farmverseToken');
 
-    const headers = new Headers();
-    headers.append('Content-Type', 'application/json');
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    
     if (token) {
-        headers.append('Authorization', `Bearer ${token}`);
+        headers['Authorization'] = `Bearer ${token}`;
     }
 
     const config = { method, headers };
@@ -46,6 +48,9 @@ export const deleteObject = (farmId, objectId) => request(`/farms/${farmId}/obje
 export const deleteAllObjects = (farmId) => request(`/farms/${farmId}/objects`, 'DELETE')
 export const updateObjectGrowth = (farmId, objectId, growth) => request(`/farms/${farmId}/objects/${objectId}/growth`, 'PUT', { growth })
 export const toggleDevice = (farmId, objectId, is_running) => request(`/farms/${farmId}/objects/${objectId}/toggle`, 'PUT', { is_running })
+
+// --- Zone Endpoints ---
+export const getZonesForFarm = (farmId) => request(`/farms/${farmId}/zones`, 'GET')
 export const updateSensorValue = (farmId, objectId, sensor_value) => request(`/farms/${farmId}/objects/${objectId}/sensor`, 'PUT', { sensor_value })
 export const updateObjectPosition = (farmId, objectId, positionData) => request(`/farms/${farmId}/objects/${objectId}/position`, 'PUT', positionData)
 

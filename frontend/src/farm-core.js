@@ -1,5 +1,7 @@
 import { getObjectsForFarm, toggleDevice, updateObjectGrowth } from './apiService.js';
 import { addObject, setupEventListeners } from './utils.js';
+import { initSensorWebSocket, getLatestFarmData } from './sensorService.js';
+import { initSensorOverlay, updateFloatingLabels } from './sensorOverlay.js';
 
 // Global variables
 let scene, camera, renderer, controls;
@@ -13,9 +15,9 @@ let fillLight;
 let isNightMode = false
 let streetLightPointLights = []
 let streetLightMaterial = null
+let staticLightManualOverride = false
 let userAvatar = null
 let avatarTarget = new THREE.Vector3()
-
 
 let selectedObjectType = null;
 let deleteMode = false;
@@ -48,7 +50,6 @@ const objectConfigs = {
     // IoT Devices
     moistureSensor: { name: 'Moisture Sensor', emoji: '💧', category: 'iot' },
     tempSensor: { name: 'Temperature Sensor', emoji: '🌡️', category: 'iot' },
-    humiditySensor: { name: 'Humidity Sensor', emoji: '💦', category: 'iot' },
     waterPump: { name: 'Water Pump', emoji: '⛽', category: 'iot' },
     sprinkler: { name: 'Sprinkler', emoji: '🚿', category: 'iot' },
     fan: { name: 'Fan', emoji: '🌀', category: 'iot' },
@@ -82,23 +83,19 @@ function formatSensorValue(type, value) {
     return `${percentValue.toFixed(0)}%`;
 }
 
+const FARM_WIDE_TYPES = new Set(['tempSensor', 'fan', 'streetLight']);
+
 function getZoneLabelForObject(obj) {
+    const type = obj?.userData?.type || '';
+
+    if (FARM_WIDE_TYPES.has(type)) return null;
+
     const explicitZoneId = obj?.userData?.zoneId ?? obj?.userData?.zone_id ?? obj?.userData?.zoneID;
     if (explicitZoneId !== undefined && explicitZoneId !== null && explicitZoneId !== '') {
         return `Zone ${explicitZoneId}`;
     }
 
-    const x = obj?.position?.x ?? 0;
-    const z = obj?.position?.z ?? 0;
-
-    if (Math.abs(x) <= 4 && Math.abs(z) <= 4) {
-        return 'Central Zone';
-    }
-
-    if (x < 0 && z < 0) return 'Zone A';
-    if (x >= 0 && z < 0) return 'Zone B';
-    if (x < 0 && z >= 0) return 'Zone C';
-    return 'Zone D';
+    return null;
 }
 
 function computeZoneStatus(summary) {
@@ -126,6 +123,7 @@ function summarizeZones() {
 
     objects.forEach((obj) => {
         const zoneLabel = getZoneLabelForObject(obj);
+        if (!zoneLabel) return;
         if (!zoneMap.has(zoneLabel)) {
             zoneMap.set(zoneLabel, {
                 label: zoneLabel,
@@ -161,8 +159,13 @@ function summarizeZones() {
                 }
             }
 
-            if (type === 'moistureSensor' || type === 'tempSensor' || type === 'humiditySensor') {
-                summary.sensorReadings.push({ type, value: Number(obj?.userData?.sensorValue ?? 0) });
+            if (type === 'moistureSensor' || type === 'tempSensor') {
+                summary.sensorReadings.push({ 
+                    type, 
+                    value: Number(obj?.userData?.sensorValue ?? 0),
+                    // DHT11: humidity lives on the same object as temp
+                    humidity: type === 'tempSensor' ? Number(obj?.userData?.humidityValue ?? 0) : null
+                });            
             }
         }
     });
@@ -171,8 +174,8 @@ function summarizeZones() {
         const averageGrowth = summary.growthSamples > 0 ? summary.growthTotal / summary.growthSamples : 0;
         const moistureReading = summary.sensorReadings.find((reading) => reading.type === 'moistureSensor');
         const temperatureReading = summary.sensorReadings.find((reading) => reading.type === 'tempSensor');
-        const humidityReading = summary.sensorReadings.find((reading) => reading.type === 'humiditySensor');
-
+        
+        const humidityValue = temperatureReading?.humidity ?? null;
         if (moistureReading && Number(moistureReading.value) <= 0.35) {
             summary.alerts.push('Low soil moisture');
         }
@@ -181,9 +184,7 @@ function summarizeZones() {
             summary.alerts.push('High temperature');
         }
 
-        if (humidityReading && Number(humidityReading.value) <= 0.35) {
-            summary.alerts.push('Low humidity');
-        }
+        if (humidityValue !== null && humidityValue <= 0.35) summary.alerts.push('Low humidity');
 
         const status = computeZoneStatus({
             ...summary,
@@ -196,7 +197,7 @@ function summarizeZones() {
             sensorCount: summary.sensors,
             moistureLabel: moistureReading ? formatSensorValue('moistureSensor', moistureReading.value) : '--',
             temperatureLabel: temperatureReading ? formatSensorValue('tempSensor', temperatureReading.value) : '--',
-            humidityLabel: humidityReading ? formatSensorValue('humiditySensor', humidityReading.value) : '--',
+            humidityLabel: humidityValue !== null ? formatSensorValue('humiditySensor', humidityValue) : '--',
             status
         };
     });
@@ -221,7 +222,28 @@ function updateFarmDashboard() {
 
     if (zoneCountElement) zoneCountElement.textContent = String(zoneSummaries.length);
     if (objectCountElement) objectCountElement.textContent = String(objectTotal);
-    if (alertCountElement) alertCountElement.textContent = String(alertTotal);
+    if (alertCountElement) {
+        alertCountElement.textContent = String(alertTotal);
+        alertCountElement.style.color = alertTotal > 0 ? '#ff6b6b' : '';
+    }
+
+    // Populate alerts modal
+    const alertsModalContent = document.getElementById('alerts-modal-content');
+    if (alertsModalContent) {
+        const zonesWithAlerts = zoneSummaries.filter(s => s.alerts.length > 0);
+        if (zonesWithAlerts.length === 0) {
+            alertsModalContent.innerHTML = '<p style="color:#aaa; margin:0;">No active alerts.</p>';
+        } else {
+            alertsModalContent.innerHTML = zonesWithAlerts.map(s => `
+                <div style="margin-bottom:12px;">
+                    <div style="color:#ffaa00; font-weight:bold; margin-bottom:4px;">${s.label}</div>
+                    ${s.alerts.map(a => `
+                        <div style="padding:6px 10px; background:rgba(255,100,100,0.1); border-left:3px solid #ff4444; margin-bottom:4px; border-radius:4px;">
+                            ⚠️ ${a}
+                        </div>`).join('')}
+                </div>`).join('');
+        }
+    }
 
     if (zoneSummaries.length === 0) {
         zoneList.innerHTML = `
@@ -277,7 +299,7 @@ function updateFarmDashboard() {
 
                 <div class="zone-alerts">
                     <strong>Status:</strong> ${alertText}<br>
-                    <strong>Humidity:</strong> ${summary.humidityLabel}
+                    <strong>Humidity:</strong> ${(() => { const f = getLatestFarmData(); return f?.humidity != null ? f.humidity.toFixed(0) + '%' : '--'; })()}
                 </div>
             </section>
         `;
@@ -345,27 +367,36 @@ export async function init() {
     applyDayNightLighting(isNightMode);
     setupDayNightToggle();
 
-    // Load objects from API
+    // 🌟 FIX: Load objects from window.currentFarmObjects created by main.js
     try {
-        const farmObjects = await getObjectsForFarm(farmId)
-        console.log('loading objs from db')
-        objects.length = 0
+        let farmObjects = window.currentFarmObjects;
+        
+        // Fallback just in case window data isn't there
+        if (!farmObjects) {
+            console.log('Falling back to getObjectsForFarm API call...');
+            farmObjects = await getObjectsForFarm(farmId);
+        }
+
+        console.log('Loading objs into 3D scene from db:', farmObjects);
+        objects.length = 0;
+        
         farmObjects.forEach(dbObject => {
             const position = new THREE.Vector3(
                 parseFloat(dbObject.position_x), 
                 parseFloat(dbObject.position_y), 
                 parseFloat(dbObject.position_z)
             )
-            addObject(scene, objects, dbObject.object_name, position, dbObject, objectConfigs)
+
+            const mesh = addObject(scene, objects, dbObject.object_name, position, dbObject, objectConfigs);
         })
 
         const objectCountElement = document.getElementById('object-count')
         if(objectCountElement) objectCountElement.textContent = objects.length
         updateFarmDashboard()
 
-    }catch(error) {
-        console.error('failed to load objs')
-        alert(`error loading farm data: ${error.message}`)
+    } catch(error) {
+        console.error('failed to load objs:', error);
+        alert(`error loading farm data: ${error.message}`);
     }
     
 
@@ -378,7 +409,10 @@ export async function init() {
         objectsRef: objects,
         objectConfigs
     };
-    setupEventListeners(context)
+    setupEventListeners(context);
+
+    initSensorWebSocket();
+    initSensorOverlay({ camera, renderer, scene, objectsRef: objects });
 
     setupCameraView()
 
@@ -426,12 +460,8 @@ export async function init() {
                     }
                 }
 
-                if (obj.userData.category === 'iot' && obj.userData.dbId) {
-                    const dbMatch = liveDbObjects.find(dbObj => dbObj.id === obj.userData.dbId);
-                    if (dbMatch && dbMatch.metadata && dbMatch.metadata.sensor_value !== undefined) {
-                        obj.userData.sensorValue = parseFloat(dbMatch.metadata.sensor_value);
-                    }
-                }
+                // NOTE: sensor values are kept live from WebSocket (sensorOverlay.js),
+                // so we do NOT overwrite them from the DB here.
             })
 
             updateFarmDashboard()
@@ -442,7 +472,6 @@ export async function init() {
 
     window.updateFarmDashboard = updateFarmDashboard;
 }
-
 
 //setup camera view
 function setupCameraView() {
@@ -590,23 +619,49 @@ function createFarmFence() {
     }
 }
 
+// ─── STATIC STREET LIGHT CONTROL ─────────────────────────────────────────────
+function applyStaticLightState(isOn) {
+    window._currentStaticLightState = isOn;
+    if (streetLightMaterial) streetLightMaterial.emissiveIntensity = isOn ? 1.5 : 0;
+    streetLightPointLights.forEach(l => l.intensity = isOn ? 300 : 0);
+}
+
+// Called from sensorOverlay when ESP32 data arrives
+window._setStaticLightFromSensor = function(isOn) {
+    if (staticLightManualOverride) return;
+    applyStaticLightState(isOn);
+    if (window._refreshSidePanel) window._refreshSidePanel();
+};
+
+// Called from side panel manual toggle button
+window._manualToggleStaticLight = function(isOn) {
+    staticLightManualOverride = true;
+    window._staticLightManualOverride = true;
+    applyStaticLightState(isOn);
+    if (window._refreshSidePanel) window._refreshSidePanel();
+};
+
+// Called from "Resume Auto" button in side panel
+window._resumeAutoStaticLight = function() {
+    staticLightManualOverride = false;
+    window._staticLightManualOverride = false;
+    if (window._refreshSidePanel) window._refreshSidePanel();
+};
+
 function createStreetLights() {
     const metalMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7, metalness: 0.8 });
     
-    const lightMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0xffffaa, 
-        emissive: 0xfff0aa, 
-        emissiveIntensity: isNightMode ? 2 : 0 
+    streetLightMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffaa,
+        emissive: 0xfff0aa,
+        emissiveIntensity: isNightMode ? 2 : 0
     });
 
    
     streetLightPointLights = [];
 
     const positions = [
-    //    { x: -9 - Math.random(), z: -9 - Math.random() }, // Top-Left
-        // { x:  9 + Math.random(), z: -9 - Math.random() }, // Top-Right
-        { x: -9 - Math.random() ,z:  10 + Math.random() }, // Bottom-Left
-        // { x:  9 + Math.random(), z:  9 + Math.random() }  // Bottom-Right
+        { x: -11, z: 11 },
     
     ];
 
@@ -631,17 +686,16 @@ function createStreetLights() {
         lamp.position.set(1.0, 3.7, 0);
         group.add(lamp);
 
-        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), lightMaterial);
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), streetLightMaterial);
         bulb.position.set(1.0, 3.65, 0);
         group.add(bulb);
 
-        // INCREASED TO 1000, DISTANCE 0 (infinite reach, dims naturally)
-        const light = new THREE.SpotLight(0xfff0aa, isNightMode ? 1000 : 0);
+        const light = new THREE.SpotLight(0xfff0aa, isNightMode ? 300 : 0);
         light.position.set(1.0, 3.5, 0);
-        light.angle = Math.PI / 2.5; 
+        light.angle = Math.PI / 3;    // 60° cone — covers the farm
         light.penumbra = 0.5;
-        light.decay = 0.4;
-        light.distance = 0; 
+        light.decay = 2;              // physically correct falloff
+        light.distance = 30;          // reaches across the farm
         light.castShadow = false;
 
         const targetObject = new THREE.Object3D();
@@ -739,9 +793,9 @@ function applyDayNightLighting(night) {
         fillLight.intensity = 0.32;
         renderer.toneMappingExposure = 0.78;
 
-        //turn on
-        if (streetLightMaterial) streetLightMaterial.emissiveIntensity = 2;
-        streetLightPointLights.forEach(light => light.intensity = 10)
+        // night: turn on static light as default (ESP32/manual can still override)
+        staticLightManualOverride = false;
+        applyStaticLightState(true);
     } else {
         ambientLight.color.setHex(0xffffff);
         ambientLight.intensity = 0.7;
@@ -754,9 +808,9 @@ function applyDayNightLighting(night) {
         fillLight.intensity = 0.5;
         renderer.toneMappingExposure = 1.2;
 
-        //turn off
-        if (streetLightMaterial) streetLightMaterial.emissiveIntensity = 0;
-        streetLightPointLights.forEach(light => light.intensity = 0);
+        // turn off static light
+        staticLightManualOverride = false;
+        applyStaticLightState(false);
     }
 }
 
@@ -941,8 +995,8 @@ function animate() {
             }
         }
 
-        // Auto-turn on sprinklers and pumps
-        if ((obj.userData.type === 'sprinkler' || obj.userData.type === 'waterPump') && justBecameLowMoisture) {
+        // Auto-turn on sprinklers and pumps when moisture drops low (skip if manually overridden)
+        if ((obj.userData.type === 'sprinkler' || obj.userData.type === 'waterPump') && justBecameLowMoisture && !obj.userData.manualOverride) {
             obj.userData.isRunning = true;
         }
 
@@ -958,19 +1012,11 @@ function animate() {
             obj.fanBlades.rotation.y += 0.1; 
         }
 
-        //toggle user-placed streetLight
-        if (obj.userData.type === 'streetLight') {
-            if (isNightMode) {
-                if (obj.bulbMaterial) obj.bulbMaterial.emissiveIntensity = 2;
-                if (obj.spotLight) obj.spotLight.intensity = 10;
-            } else {
-                if (obj.bulbMaterial) obj.bulbMaterial.emissiveIntensity = 0;
-                if (obj.spotLight) obj.spotLight.intensity = 0;
-            }
-        }
+        // Static street light is controlled via applyStaticLightState / window helpers — no DB object needed
 
     })
 
+    updateFloatingLabels();
     renderer.render(scene, camera);
 }
 
@@ -1178,7 +1224,91 @@ function buildFarmAvatar(config) {
     return outerGroup;
 }
 
+// --- WEBSOCKET LOGIC ---
+// initSensorWebSocket is imported from sensorService.js
 
+function countExistingZonesIn3D() {
+    return objects.filter(obj => obj.userData.type === 'soilBed').length;
+}
+
+function showNewZonePopup(zoneNumber) {
+    const overlay = document.createElement('div');
+    overlay.className = 'new-zone-announcement';
+    overlay.innerHTML = `
+        <div class="modal-content" style="background: #151522; padding: 30px; border-radius: 20px; border: 1px solid #7c6df9; text-align: center; color: white;">
+            <h3 style="color: #7c6df9;">🚀 New Hardware Detected!</h3>
+            <p>We found a new Irrigation Zone (Zone ${zoneNumber}) on your ESP32.</p>
+            <p>What would you like to plant in this new area?</p>
+            <select id="new-crop-selection" style="width: 100%; padding: 10px; margin: 20px 0; background: #0a0a0f; color: white; border: 1px solid #333;">
+                <option value="tomato">Tomatoes 🍅</option>
+                <option value="carrot">Carrots 🥕</option>
+                <option value="corn">Corn 🌽</option>
+                <option value="sunflower">Sunflowers 🌻</option>
+            </select>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="confirm-zone-btn" style="background: #7c6df9; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">Add to 3D Farm</button>
+            </div>
+        </div>
+    `;
+    
+    // Simple Full-screen Overlay Styles
+    Object.assign(overlay.style, {
+        position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
+        background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', 
+        alignItems: 'center', zIndex: '10000', backdropFilter: 'blur(4px)'
+    });
+
+    document.body.appendChild(overlay);
+
+    document.getElementById('confirm-zone-btn').onclick = () => {
+        const cropType = document.getElementById('new-crop-selection').value;
+        commissionNewZone(zoneNumber, cropType);
+        overlay.remove();
+    };
+}
+
+/**
+ * Saves the new zone objects to the DB and renders them in Three.js
+ */
+async function commissionNewZone(zoneId, cropType) {
+    const farmId = localStorage.getItem('selectedFarmId');
+    
+    // Offset position: Zone 1 at 0, Zone 2 at 5, Zone 3 at 10, etc.
+    const offsetX = (zoneId - 1) * 5; 
+    
+    // Define the cluster of objects for the new zone
+    const newObjects = [
+        { object_name: 'soilBed', position_x: offsetX, position_y: 0, position_z: 0, zone_id: zoneId },
+        { object_name: cropType, position_x: offsetX, position_y: 0.2, position_z: 0, zone_id: zoneId },
+        { object_name: 'moistureSensor', position_x: offsetX + 0.8, position_y: 0.1, position_z: 0.8, zone_id: zoneId },
+        { object_name: 'sprinkler', position_x: offsetX - 0.8, position_y: 0.1, position_z: -0.8, zone_id: zoneId }
+    ];
+
+    try {
+        console.log(`Commissioning Zone ${zoneId}...`);
+        
+        for (const objData of newObjects) {
+            // 1. Save to DB using your existing createObject API
+            const { createObject } = await import('./apiService.js');
+            const savedObj = await createObject(farmId, objData);
+            
+            // 2. Render in 3D immediately
+            const pos = new THREE.Vector3(savedObj.position_x, savedObj.position_y, savedObj.position_z);
+            addObject(scene, objects, savedObj.object_name, pos, savedObj, objectConfigs);
+        }
+        
+        console.log("Zone added to Digital Twin successfully.");
+        updateFarmDashboard();
+        
+        // Optional: Move camera to show the new zone
+        controls.target.set(offsetX, 0, 0);
+        camera.position.set(offsetX + 10, 10, 10);
+
+    } catch (err) {
+        console.error("Failed to commission new zone:", err);
+        alert("Error saving new zone data to server.");
+    }
+}
 
 // Window resize handler
 function onWindowResize() {

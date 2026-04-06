@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import userRepository from '../data/userRepository.js'
 import { config } from '../config/environment.js'
+import userRepository from '../data/userRepository.js'
 
 class UserService {
     async register(userData) {
@@ -55,6 +55,7 @@ class UserService {
                 id: user.id,
                 name: user.name,
                 email: user.email,
+                has_avatar: user.has_avatar,
                 avatar_config: user.avatar_config
             },
         }

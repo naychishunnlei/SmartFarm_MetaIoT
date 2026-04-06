@@ -154,21 +154,6 @@
             [20.7, 106.2]
         ];
 
-        const FARM_SEEDS = [
-            { label: 'Bangkok Farm', query: 'Bangkok, Thailand', desc: 'Central region smart farm' },
-            { label: 'Chiang Mai Farm', query: 'Chiang Mai, Thailand', desc: 'Northern mountain farm' },
-            { label: 'Phuket Farm', query: 'Phuket, Thailand', desc: 'Southern island farm' },
-            { label: 'Khon Kaen Farm', query: 'Khon Kaen, Thailand', desc: 'Northeast rice farm' },
-            { label: 'Ayutthaya Farm', query: 'Ayutthaya, Thailand', desc: 'Historical region farm' }
-        ];
-
-        const FALLBACK_COORDS = {
-            'Bangkok Farm': { lat: 13.7563, lon: 100.5018 },
-            'Chiang Mai Farm': { lat: 18.7883, lon: 98.9853 },
-            'Phuket Farm': { lat: 7.8804, lon: 98.3923 },
-            'Khon Kaen Farm': { lat: 16.4419, lon: 102.8350 },
-            'Ayutthaya Farm': { lat: 14.3532, lon: 100.5689 }
-        };
 
         const mapStatus = document.getElementById('map-status');
         const map = L.map('map', {
@@ -258,33 +243,46 @@
         }
 
         async function loadRealFarmMarkers() {
-            const farms = [];
-            for (const seed of FARM_SEEDS) {
-                try {
-                    const resolved = await geocodeFarm(seed);
-                    const farm = buildFarmRecord(seed, { lat: resolved.lat, lon: resolved.lon });
-                    farms.push({ farm, source: 'API' });
-                    await new Promise((resolve) => setTimeout(resolve, 1100));
-                } catch (error) {
-                    const fallback = FALLBACK_COORDS[seed.label];
-                    if (fallback) {
-                        farms.push({ farm: buildFarmRecord(seed, fallback), source: 'fallback' });
+            setStatus('Loading your farms from database...');
+
+            try {
+                // 1. Fetch real farms from your actual API
+                const response = await fetch('http://localhost:5001/api/farms', {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('farmverseToken')}`
                     }
+                });
+
+                if (!response.ok) throw new Error('Failed to fetch farms');
+                
+                const farms = await response.json();
+
+                // 2. Clear existing markers if any
+                // (Assuming you use a markerGroup, if not, just loop)
+                
+                if (farms.length === 0) {
+                    setStatus('No farms found. Click the map to create one!');
+                    return;
                 }
-            }
 
-            if (!farms.length) {
-                setStatus('Unable to load farm locations.', true);
-                return;
-            }
+                // 3. Add markers for only REAL data
+                farms.forEach(farm => {
+                    // Mapping your DB columns (latitude/longitude) to the Leaflet format
+                    const markerData = {
+                        name: farm.name,
+                        desc: farm.location || 'Real Farm Location',
+                        lat: parseFloat(farm.latitude), 
+                        lon: parseFloat(farm.longitude),
+                        id: farm.id
+                    };
+                    addFarmMarker(markerData, 'Database');
+                });
 
-            farms.forEach(({ farm, source }) => addFarmMarker(farm, source));
+                setStatus(`Loaded ${farms.length} farms from your account.`);
 
-            const allApi = farms.every((item) => item.source === 'API');
-            if (allApi) {
-                setStatus('Loaded real farm coordinates from API.');
-            } else {
-                setStatus('Loaded farm coordinates (some used fallback when API was unavailable).');
+            } catch (error) {
+                console.error("Load Error:", error);
+                setStatus('Error loading your farms. Please log in again.', true);
             }
         }
 

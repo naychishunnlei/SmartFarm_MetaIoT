@@ -1,3 +1,4 @@
+import userRepository from '../../data/userRepository.js';
 import userService from '../../service/userService.js';
 
 class UserController {
@@ -21,8 +22,22 @@ class UserController {
     }
 
     async getProfile(req, res) {
-        // The user object is attached to the request by the authMiddleware
-        res.status(200).json({ user: req.user });
+        try {
+            const userId = req.user.userId; // From authMiddleware
+            const user = await userRepository.findById(userId);
+            
+            if (!user) return res.status(404).json({ message: 'User not found' });
+
+            res.json({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                has_avatar: user.has_avatar, // 🌟 THE CRITICAL FIELD
+                avatar_config: user.avatar_config
+            });
+        } catch (error) {
+            res.status(500).json({ message: 'Error fetching profile' });
+        }
     }
 
     async updateAvatar(req, res) {

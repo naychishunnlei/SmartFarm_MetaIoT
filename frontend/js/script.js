@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');
 
-    // Modal Functions
+    // --- Modal Functions ---
     function openLoginModal() {
         console.log('Login modal opened');
         if (loginModal) loginModal.classList.add('active');
@@ -55,14 +55,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Close modal when clicking outside
+    // Close modal when clicking outside of it
     window.addEventListener('click', (event) => {
         if (event.target === loginModal || event.target === registerModal) {
             closeAllModals();
         }
     });
 
-    // Handle Login Form Submission
+    // --- Handle Login Form Submission ---
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -76,26 +76,42 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             try {
+                // Change button text to show it's working
+                const submitBtn = loginForm.querySelector('button[type="submit"]');
+                const originalText = submitBtn.textContent;
+                submitBtn.textContent = 'Logging in...';
+                submitBtn.disabled = true;
+
                 const result = await loginUser({ email, password });
                 
-                // On successful login, save the token and user info
+                console.log("BACKEND SENT THIS: ", result);
+                
+                // Save token and user data
                 localStorage.setItem('farmverseToken', result.token);
                 localStorage.setItem('farmverseUser', JSON.stringify(result.user));
                 
-                alert('Login successful! Let\'s customize your avatar...');
-                
-                // Redirect to the avatar page
-                window.location.href = 'avatar.html';
+                // 🌟 THE FIX: Route based on database 'has_avatar' flag
+                if (result.user && result.user.has_avatar && result.user.has_avatar !== 'false') {
+                    // Avatar exists -> Go straight to the Map
+                    window.location.href = 'map.html';
+                } else {
+                    // No avatar -> Go to customization
+                    alert("Login successful! Let's customize your avatar...");
+                    window.location.href = 'avatar.html';
+                }
                 
             } catch (error) {
                 alert(`Login failed: ${error.message}`);
+                const submitBtn = loginForm.querySelector('button[type="submit"]');
+                submitBtn.textContent = 'Login';
+                submitBtn.disabled = false;
             }
             
             loginForm.reset();
         });
     }
 
-    // Handle Register Form Submission
+    // --- Handle Register Form Submission ---
     if (registerForm) {
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -108,7 +124,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const agreeTermsInput = document.querySelector('.checkbox input[type="checkbox"]');
             const agreeTerms = agreeTermsInput ? agreeTermsInput.checked : false;
             
-            // --- Client-side validation ---
             if (!name || !email || !password || !confirmPassword) {
                 alert('Please fill in all fields');
                 return;
@@ -127,21 +142,30 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             try {
+                const submitBtn = registerForm.querySelector('button[type="submit"]');
+                submitBtn.textContent = 'Creating account...';
+                submitBtn.disabled = true;
+
                 await registerUser({ name, email, password });
                 alert('Registration successful! Please log in.');
                 registerForm.reset();
                 openLoginModal();
+
+                submitBtn.textContent = 'Create Account';
+                submitBtn.disabled = false;
             } catch (error) {
                 alert(`Registration failed: ${error.message}`);
+                const submitBtn = registerForm.querySelector('button[type="submit"]');
+                submitBtn.textContent = 'Create Account';
+                submitBtn.disabled = false;
             }
         });
     }
 
-    // Smooth scroll for navigation links
+    // --- Smooth scroll for navigation links ---
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (e) {
             const href = this.getAttribute('href');
-            
             if (href === '#' || href === '') return;
             
             e.preventDefault();
@@ -155,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Contact Form Submission
+    // --- Contact Form Submission ---
     const contactForm = document.querySelector('.contact-form');
     if (contactForm) {
         contactForm.addEventListener('submit', (e) => {
@@ -166,19 +190,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Check if user is logged in on page load
+    // --- Forward Gatekeeper ---
+    // If they already have a token, automatically send them to the map
+    // so they don't have to log in again if they refresh the index page.
     const token = localStorage.getItem('farmverseToken');
     if (token) {
-        console.log('User is logged in.');
+        console.log('Active session found. Forwarding to map...');
+        window.location.href = 'map.html';
     }
 });
 
-// Logout function (can be used from other pages)
+// --- Global Logout Function ---
 window.logout = function() {
-    // Clear the authentication token and user info
     localStorage.removeItem('farmverseToken');
     localStorage.removeItem('farmverseUser');
-    
-    // Redirect to the home page
     window.location.href = 'index.html';
 };

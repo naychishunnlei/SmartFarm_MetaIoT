@@ -15,7 +15,8 @@ const app = express();
 const server = createServer(app);
 
 const corsOptions = {
-    origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000'],
+    // Added 5500 to support local HTML testing via Live Server
+    origin: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:5500'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -28,8 +29,9 @@ app.use(express.json());
 // Connect to Database
 connectDatabase();
 
-// Start WebSocket server for ESP32 sensor stream
-initWebSocket(server);
+// 🌟 NEW: Start WebSocket server AND attach it to Express
+const wss = initWebSocket(server);
+app.set('wss', wss); // This allows your route controllers to talk to the ESP32!
 
 // API Routes
 app.use('/api/users', userRoute)
