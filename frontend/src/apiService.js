@@ -55,6 +55,8 @@ export const updateSensorValue = (farmId, objectId, sensor_value) => request(`/f
 export const updateObjectPosition = (farmId, objectId, positionData) => request(`/farms/${farmId}/objects/${objectId}/position`, 'PUT', positionData)
 
 
+export const getSensorHistory = (farmId, limit = 50) => request(`/farms/${farmId}/history?limit=${limit}`, 'GET')
+
 export const getFarmsForUser = () => request('/farms', 'GET')
 export const getOrCreateFarm = (farmData) => request('/farms', 'POST', farmData)
 export const createFarm = (farmData) => request('/farms/create', 'POST', farmData)

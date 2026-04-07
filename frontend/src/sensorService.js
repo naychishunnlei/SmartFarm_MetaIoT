@@ -2,6 +2,7 @@
 
 let latestFarmData = null;
 let latestZoneData = {};
+let lastDataTimestamp = null;
 const listeners = [];
 
 export function onSensorUpdate(callback) {
@@ -14,6 +15,11 @@ function notifyListeners() {
 
 export function getLatestFarmData() { return latestFarmData; }
 export function getLatestZoneData(zoneId) { return latestZoneData[zoneId] || null; }
+export function getLastDataTimestamp() { return lastDataTimestamp; }
+export function isSensorOnline() {
+    if (!lastDataTimestamp) return false;
+    return (Date.now() - lastDataTimestamp) < 30000; // offline if no data for 30s
+}
 
 export function initSensorWebSocket() {
     const farmId = localStorage.getItem('selectedFarmId');
@@ -37,6 +43,8 @@ export function initSensorWebSocket() {
             // Only process data for the farm we're currently viewing
             const currentFarmId = parseInt(localStorage.getItem('selectedFarmId'));
             if (data.farm_id && data.farm_id !== currentFarmId) return;
+
+            lastDataTimestamp = Date.now();
 
             // Farm-wide data
             latestFarmData = {

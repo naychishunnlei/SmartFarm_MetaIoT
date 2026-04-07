@@ -1,7 +1,8 @@
-import { getObjectsForFarm, toggleDevice, updateObjectGrowth } from './apiService.js';
+import { getObjectsForFarm, toggleDevice, updateObjectGrowth, getZonesForFarm } from './apiService.js';
 import { addObject, setupEventListeners } from './utils.js';
-import { initSensorWebSocket, getLatestFarmData } from './sensorService.js';
+import { initSensorWebSocket, getLatestFarmData, isSensorOnline } from './sensorService.js';
 import { initSensorOverlay, updateFloatingLabels } from './sensorOverlay.js';
+import { initAnalyticsPanel } from './analyticsPanel.js';
 
 // Global variables
 let scene, camera, renderer, controls;
@@ -51,7 +52,7 @@ const objectConfigs = {
     moistureSensor: { name: 'Moisture Sensor', emoji: '💧', category: 'iot' },
     tempSensor: { name: 'Temperature Sensor', emoji: '🌡️', category: 'iot' },
     waterPump: { name: 'Water Pump', emoji: '⛽', category: 'iot' },
-    sprinkler: { name: 'Sprinkler', emoji: '🚿', category: 'iot' },
+    sprinkler: { name: 'Sprinkler', emoji: '💦', category: 'iot' },
     fan: { name: 'Fan', emoji: '🌀', category: 'iot' },
     streetLight: {name: 'Street Light', emoji: '💡', category: 'iot'},
     // Animals
@@ -85,6 +86,17 @@ function formatSensorValue(type, value) {
 
 const FARM_WIDE_TYPES = new Set(['tempSensor', 'fan', 'streetLight']);
 
+// Maps DB zone ID → zone name (e.g. 2 → "Zone 1")
+// Populated during init() using the zones API so that display names
+// always reflect the zone's local index, not its auto-increment DB id.
+const zoneNameMap = new Map();
+window._zoneNameMap = zoneNameMap; // expose for sensorOverlay.js
+
+function getZoneLabel(zoneId) {
+    if (zoneId === undefined || zoneId === null || zoneId === '') return null;
+    return zoneNameMap.get(Number(zoneId)) ?? `Zone ${zoneId}`;
+}
+
 function getZoneLabelForObject(obj) {
     const type = obj?.userData?.type || '';
 
@@ -92,7 +104,7 @@ function getZoneLabelForObject(obj) {
 
     const explicitZoneId = obj?.userData?.zoneId ?? obj?.userData?.zone_id ?? obj?.userData?.zoneID;
     if (explicitZoneId !== undefined && explicitZoneId !== null && explicitZoneId !== '') {
-        return `Zone ${explicitZoneId}`;
+        return getZoneLabel(explicitZoneId);
     }
 
     return null;
@@ -118,18 +130,35 @@ function computeZoneStatus(summary) {
     return { label: 'Stable', tone: 'healthy' };
 }
 
+// Types treated as zone-level sensors (not actuators)
+const SENSOR_IOT_TYPES = new Set(['moistureSensor', 'tempSensor', 'humiditySensor']);
+// Types treated as actuators
+const ACTUATOR_IOT_TYPES = new Set(['waterPump', 'sprinkler', 'fan', 'streetLight']);
+
 function summarizeZones() {
+    const isOnline = isSensorOnline();
     const zoneMap = new Map();
 
     objects.forEach((obj) => {
-        const zoneLabel = getZoneLabelForObject(obj);
+        const category = obj?.userData?.category || 'unknown';
+        const type = obj?.userData?.type || '';
+
+        let zoneLabel = getZoneLabelForObject(obj);
+
+        // Crops/animals/infrastructure without a zone → show in "General Farm" card
+        if (!zoneLabel && (category === 'crops' || category === 'animals' || category === 'infrastructure')) {
+            zoneLabel = 'General Farm';
+        }
         if (!zoneLabel) return;
+
         if (!zoneMap.has(zoneLabel)) {
             zoneMap.set(zoneLabel, {
                 label: zoneLabel,
+                isGeneral: zoneLabel === 'General Farm',
                 totalObjects: 0,
                 crops: 0,
-                sensors: 0,
+                sensorCount: 0,   // actual sensor devices (moisture, DHT)
+                actuatorCount: 0, // actuator devices (pump, sprinkler)
                 runningDevices: 0,
                 growthTotal: 0,
                 growthSamples: 0,
@@ -139,9 +168,6 @@ function summarizeZones() {
         }
 
         const summary = zoneMap.get(zoneLabel);
-        const category = obj?.userData?.category || 'unknown';
-        const type = obj?.userData?.type || '';
-
         summary.totalObjects += 1;
 
         if (category === 'crops') {
@@ -152,49 +178,54 @@ function summarizeZones() {
         }
 
         if (category === 'iot') {
-            summary.sensors += 1;
-            if (type === 'waterPump' || type === 'sprinkler' || type === 'fan' || type === 'streetLight') {
-                if (obj?.userData?.isRunning) {
+            if (SENSOR_IOT_TYPES.has(type)) {
+                summary.sensorCount += 1;
+                if (type === 'moistureSensor' || type === 'tempSensor') {
+                    summary.sensorReadings.push({
+                        type,
+                        value: Number(obj?.userData?.sensorValue ?? 0),
+                        // DHT11: humidity on same object as temp
+                        humidity: type === 'tempSensor' ? Number(obj?.userData?.humidityValue ?? 0) : null
+                    });
+                }
+            } else if (ACTUATOR_IOT_TYPES.has(type)) {
+                summary.actuatorCount += 1;
+                if (isOnline && obj?.userData?.isRunning) {
                     summary.runningDevices += 1;
                 }
-            }
-
-            if (type === 'moistureSensor' || type === 'tempSensor') {
-                summary.sensorReadings.push({ 
-                    type, 
-                    value: Number(obj?.userData?.sensorValue ?? 0),
-                    // DHT11: humidity lives on the same object as temp
-                    humidity: type === 'tempSensor' ? Number(obj?.userData?.humidityValue ?? 0) : null
-                });            
             }
         }
     });
 
+    // Count farm-wide sensors (DHT11 = 1 unit covering temp + humidity)
+    const hasDHT = objects.some(o => o.userData.type === 'tempSensor');
+    const hasHumidityOnly = objects.some(o => o.userData.type === 'humiditySensor') && !hasDHT;
+    const farmWideSensorCount = (hasDHT ? 1 : 0) + (hasHumidityOnly ? 1 : 0);
+
     const summaries = Array.from(zoneMap.values()).map((summary) => {
         const averageGrowth = summary.growthSamples > 0 ? summary.growthTotal / summary.growthSamples : 0;
-        const moistureReading = summary.sensorReadings.find((reading) => reading.type === 'moistureSensor');
-        const temperatureReading = summary.sensorReadings.find((reading) => reading.type === 'tempSensor');
-        
+        const moistureReading = summary.sensorReadings.find(r => r.type === 'moistureSensor');
+        const temperatureReading = summary.sensorReadings.find(r => r.type === 'tempSensor');
         const humidityValue = temperatureReading?.humidity ?? null;
-        if (moistureReading && Number(moistureReading.value) <= 0.35) {
+
+        if (moistureReading && Number(moistureReading.value) <= 35) {
             summary.alerts.push('Low soil moisture');
         }
-
         if (temperatureReading && Number(temperatureReading.value) >= 35) {
             summary.alerts.push('High temperature');
         }
+        if (humidityValue !== null && humidityValue <= 35) summary.alerts.push('Low humidity');
 
-        if (humidityValue !== null && humidityValue <= 0.35) summary.alerts.push('Low humidity');
+        const status = computeZoneStatus({ ...summary, averageGrowth });
 
-        const status = computeZoneStatus({
-            ...summary,
-            averageGrowth
-        });
+        // Zone sensors + farm-wide DHT11 = total sensors visible in this zone
+        const totalSensorCount = summary.sensorCount + (summary.isGeneral ? 0 : farmWideSensorCount);
 
         return {
             ...summary,
             averageGrowth,
-            sensorCount: summary.sensors,
+            totalSensorCount,
+            farmWideSensorCount,
             moistureLabel: moistureReading ? formatSensorValue('moistureSensor', moistureReading.value) : '--',
             temperatureLabel: temperatureReading ? formatSensorValue('tempSensor', temperatureReading.value) : '--',
             humidityLabel: humidityValue !== null ? formatSensorValue('humiditySensor', humidityValue) : '--',
@@ -202,7 +233,12 @@ function summarizeZones() {
         };
     });
 
-    summaries.sort((left, right) => left.label.localeCompare(right.label));
+    // Zone cards first, General Farm last
+    summaries.sort((a, b) => {
+        if (a.isGeneral) return 1;
+        if (b.isGeneral) return -1;
+        return a.label.localeCompare(b.label);
+    });
     return summaries;
 }
 
@@ -211,20 +247,29 @@ function updateFarmDashboard() {
     const zoneCountElement = document.getElementById('dashboard-zone-count');
     const objectCountElement = document.getElementById('dashboard-object-count');
     const alertCountElement = document.getElementById('dashboard-alert-count');
+    const cropCountElement = document.getElementById('dashboard-crop-count');
+    const sensorStatusElement = document.getElementById('dashboard-sensor-status');
 
-    if (!zoneList) {
-        return;
-    }
+    if (!zoneList) return;
 
     const zoneSummaries = summarizeZones();
     const objectTotal = objects.length;
-    const alertTotal = zoneSummaries.reduce((total, summary) => total + summary.alerts.length, 0);
+    const alertTotal = zoneSummaries.reduce((total, s) => total + s.alerts.length, 0);
+    const totalCrops = objects.filter(o => o.userData.category === 'crops').length;
+    const online = isSensorOnline();
 
-    if (zoneCountElement) zoneCountElement.textContent = String(zoneSummaries.length);
+    // Update summary header metrics
+    const realZones = zoneSummaries.filter(s => !s.isGeneral);
+    if (zoneCountElement) zoneCountElement.textContent = String(realZones.length);
     if (objectCountElement) objectCountElement.textContent = String(objectTotal);
     if (alertCountElement) {
         alertCountElement.textContent = String(alertTotal);
         alertCountElement.style.color = alertTotal > 0 ? '#ff6b6b' : '';
+    }
+    if (cropCountElement) cropCountElement.textContent = String(totalCrops);
+    if (sensorStatusElement) {
+        sensorStatusElement.textContent = online ? '● Online' : '● Offline';
+        sensorStatusElement.style.color = online ? '#44ff88' : '#ff4444';
     }
 
     // Populate alerts modal
@@ -248,23 +293,53 @@ function updateFarmDashboard() {
     if (zoneSummaries.length === 0) {
         zoneList.innerHTML = `
             <div class="zone-empty">
-                No objects are placed yet. Add crops, sensors, or devices to see each zone summary update here.
+                No objects placed yet. Add crops, sensors, or devices to see zone summaries here.
             </div>
         `;
         return;
     }
 
+    const onlineColor = online ? '#44ff88' : '#ff4444';
+    const onlineDot   = online ? '●' : '○';
+    const onlineText  = online ? 'Online' : 'Offline';
+    const farmData = getLatestFarmData();
+
     zoneList.innerHTML = zoneSummaries.map((summary) => {
         const averageGrowthText = summary.growthSamples > 0 ? `${Math.round(summary.averageGrowth * 100)}%` : '--';
         const alertText = summary.alerts.length > 0 ? summary.alerts.join(', ') : 'No alerts';
+        const humidityText = farmData?.humidity != null ? farmData.humidity.toFixed(0) + '%' : '--';
 
+        if (summary.isGeneral) {
+            // General Farm card — crops/animals/infrastructure without a zone
+            return `
+                <section class="zone-card" style="border-color: rgba(150,180,255,0.2);">
+                    <div class="zone-card-header">
+                        <div>
+                            <div class="zone-card-title">🌿 General Farm</div>
+                            <div class="zone-card-subtitle">${summary.totalObjects} objects</div>
+                        </div>
+                        <span class="zone-status-pill ${summary.status.tone}">${summary.status.label}</span>
+                    </div>
+                    <div class="zone-stats">
+                        <div class="zone-stat">
+                            <span class="zone-stat-label">Crops</span>
+                            <span class="zone-stat-value">${summary.crops}</span>
+                        </div>
+                        <div class="zone-stat">
+                            <span class="zone-stat-label">Growth</span>
+                            <span class="zone-stat-value">${averageGrowthText}</span>
+                        </div>
+                    </div>
+                </section>
+            `;
+        }
+
+        // Normal zone card
         return `
             <section class="zone-card">
                 <div class="zone-card-header">
                     <div>
-                        <div class="zone-card-title">
-                            <span>${summary.label}</span>
-                        </div>
+                        <div class="zone-card-title">${summary.label}</div>
                         <div class="zone-card-subtitle">${summary.totalObjects} objects monitored</div>
                     </div>
                     <span class="zone-status-pill ${summary.status.tone}">${summary.status.label}</span>
@@ -272,34 +347,28 @@ function updateFarmDashboard() {
 
                 <div class="zone-stats">
                     <div class="zone-stat">
-                        <span class="zone-stat-label">Crops</span>
-                        <span class="zone-stat-value">${summary.crops}</span>
-                    </div>
-                    <div class="zone-stat">
-                        <span class="zone-stat-label">Devices</span>
-                        <span class="zone-stat-value">${summary.runningDevices} active</span>
-                    </div>
-                    <div class="zone-stat">
-                        <span class="zone-stat-label">Growth</span>
-                        <span class="zone-stat-value">${averageGrowthText}</span>
-                    </div>
-                    <div class="zone-stat">
                         <span class="zone-stat-label">Sensors</span>
-                        <span class="zone-stat-value">${summary.sensors}</span>
+                        <span class="zone-stat-value">
+                            ${summary.totalSensorCount}
+                            <span style="font-size:9px; margin-left:3px; color:${onlineColor}">${onlineDot} ${onlineText}</span>
+                        </span>
+                    </div>
+                    <div class="zone-stat">
+                        <span class="zone-stat-label">Actuators</span>
+                        <span class="zone-stat-value">${summary.runningDevices}/${summary.actuatorCount} active</span>
                     </div>
                     <div class="zone-stat">
                         <span class="zone-stat-label">Moisture</span>
                         <span class="zone-stat-value">${summary.moistureLabel}</span>
                     </div>
                     <div class="zone-stat">
-                        <span class="zone-stat-label">Temp</span>
-                        <span class="zone-stat-value">${summary.temperatureLabel}</span>
+                        <span class="zone-stat-label">Humidity</span>
+                        <span class="zone-stat-value">${humidityText}</span>
                     </div>
                 </div>
 
                 <div class="zone-alerts">
-                    <strong>Status:</strong> ${alertText}<br>
-                    <strong>Humidity:</strong> ${(() => { const f = getLatestFarmData(); return f?.humidity != null ? f.humidity.toFixed(0) + '%' : '--'; })()}
+                    <strong>Status:</strong> ${alertText}
                 </div>
             </section>
         `;
@@ -318,8 +387,11 @@ export async function init() {
     // Create scene
     scene = new THREE.Scene();
 
-    const storedNight = localStorage.getItem('farmverseSkyNight') === '1';
-    isNightMode = storedNight;
+    // Use real local time to determine day/night on initial load
+    const currentHour = new Date().getHours();
+    const timeBasedNight = (currentHour >= 18 || currentHour < 6);
+    isNightMode = timeBasedNight;
+    localStorage.setItem('farmverseSkyNight', isNightMode ? '1' : '0');
     skyTexture = createSkyTexture(THREE, isNightMode);
     scene.background = skyTexture;
 
@@ -367,6 +439,15 @@ export async function init() {
     applyDayNightLighting(isNightMode);
     setupDayNightToggle();
 
+    // Load zones first so zone names are correct regardless of DB auto-increment IDs
+    try {
+        const zones = await getZonesForFarm(farmId);
+        zones.forEach(z => zoneNameMap.set(z.id, z.name));
+        console.log('[Zones] Loaded zone name map:', Object.fromEntries(zoneNameMap));
+    } catch (e) {
+        console.warn('[Zones] Could not load zone names:', e);
+    }
+
     // 🌟 FIX: Load objects from window.currentFarmObjects created by main.js
     try {
         let farmObjects = window.currentFarmObjects;
@@ -413,6 +494,7 @@ export async function init() {
 
     initSensorWebSocket();
     initSensorOverlay({ camera, renderer, scene, objectsRef: objects });
+    initAnalyticsPanel();
 
     setupCameraView()
 
@@ -453,10 +535,12 @@ export async function init() {
                     }
                 }
 
-                if ((obj.userData.type === 'sprinkler' || obj.userData.type === 'waterPump') && obj.userData.dbId) {
+                // Only sync the waterPump to the DB/ESP32.
+                // Sprinklers are visual-only — they share the same pump relay on hardware.
+                if (obj.userData.type === 'waterPump' && obj.userData.dbId) {
                     if (obj.userData.isRunning !== obj.userData.db_isRunning) {
                         toggleDevice(farmId, obj.userData.dbId, obj.userData.isRunning);
-                        obj.userData.db_isRunning = obj.userData.isRunning; 
+                        obj.userData.db_isRunning = obj.userData.isRunning;
                     }
                 }
 
@@ -624,7 +708,13 @@ function applyStaticLightState(isOn) {
     window._currentStaticLightState = isOn;
     if (streetLightMaterial) streetLightMaterial.emissiveIntensity = isOn ? 1.5 : 0;
     streetLightPointLights.forEach(l => l.intensity = isOn ? 300 : 0);
+    // Keep DB object userData in sync so inspect panel shows correct state
+    const lightObj = objects.find(o => o.userData.type === 'streetLight');
+    if (lightObj) lightObj.userData.isRunning = isOn;
 }
+
+// Exposed so sensorOverlay can call it from _farmToggleDevice
+window._applyStaticLightState = applyStaticLightState;
 
 // Called from sensorOverlay when ESP32 data arrives
 window._setStaticLightFromSensor = function(isOn) {
@@ -634,11 +724,22 @@ window._setStaticLightFromSensor = function(isOn) {
 };
 
 // Called from side panel manual toggle button
-window._manualToggleStaticLight = function(isOn) {
+window._manualToggleStaticLight = async function(isOn) {
     staticLightManualOverride = true;
     window._staticLightManualOverride = true;
     applyStaticLightState(isOn);
     if (window._refreshSidePanel) window._refreshSidePanel();
+
+    // Send command to ESP32 via the streetLight DB object
+    const farmId = localStorage.getItem('selectedFarmId');
+    const lightObj = objects.find(o => o.userData.type === 'streetLight' && o.userData.dbId);
+    if (farmId && lightObj) {
+        try {
+            await toggleDevice(farmId, lightObj.userData.dbId, isOn);
+        } catch (e) {
+            console.warn('[Light] Failed to send toggle command to ESP32:', e);
+        }
+    }
 };
 
 // Called from "Resume Auto" button in side panel
@@ -974,13 +1075,16 @@ function animate() {
         }
     });
     const currentMoisture = moistureSensorCount > 0 ? (totalMoisture / moistureSensorCount) : (farmSoilMoisture * 100);
-    const isLowMoisture = currentMoisture < 30; // Threshold to trigger automation
+
+    // Only trigger automation when sensors are ONLINE
+    const sensorsOnline = isSensorOnline();
+    const isLowMoisture = sensorsOnline && (currentMoisture < 30); // Threshold to trigger automation only if sensors active
 
 
     const justBecameLowMoisture = isLowMoisture && !wasLowMoisture;
     wasLowMoisture = isLowMoisture;
 
-    // Update active sprinkler water particles (when isRunning === true)
+    // Update active sprinkler water particles (show when pump is ON, not sprinkler itself)
     objects.forEach(obj => {
 
         //Handle Crop Growth
@@ -988,28 +1092,51 @@ function animate() {
             if (obj.userData.growth < 1.0) {
                 obj.userData.growth += effectiveGrowthRate;
                 if (obj.userData.growth > 1.0) obj.userData.growth = 1.0;
-                
+
                 // Scale the crop based on its new growth value
                 const g = obj.userData.growth;
                 obj.scale.set(g, g, g);
             }
         }
 
+        // Turn OFF pumps/sprinklers when sensors go OFFLINE (unless manually overridden)
+        if ((obj.userData.type === 'sprinkler' || obj.userData.type === 'waterPump') && !sensorsOnline && !obj.userData.manualOverride) {
+            obj.userData.isRunning = false;
+        }
+
+        // Check if manual override has expired
+        const manualOverrideActive = obj.userData.manualOverrideTime && Date.now() < obj.userData.manualOverrideTime;
+
         // Auto-turn on sprinklers and pumps when moisture drops low (skip if manually overridden)
-        if ((obj.userData.type === 'sprinkler' || obj.userData.type === 'waterPump') && justBecameLowMoisture && !obj.userData.manualOverride) {
+        if ((obj.userData.type === 'sprinkler' || obj.userData.type === 'waterPump') && justBecameLowMoisture && !manualOverrideActive && !obj.userData.manualOverride) {
             obj.userData.isRunning = true;
         }
 
-        if (obj.userData.type === 'sprinkler' && obj.userData.isRunning && obj.waterEffect) {
-            obj.waterEffect.visible = true; 
-            updateSprinklerWater(obj.waterEffect)
-        } else if (obj.userData.type === 'sprinkler' && !obj.userData.isRunning && obj.waterEffect) {
-            obj.waterEffect.visible = false; 
+        // Sprinkler water: Show if PUMP in same zone is running
+        if (obj.userData.type === 'sprinkler' && obj.waterEffect) {
+            const zoneId = obj.userData.zoneId || obj.userData.zone_id;
+            const zonePump = objects.find(o =>
+                o.userData.type === 'waterPump' &&
+                (o.userData.zoneId === zoneId || o.userData.zone_id === zoneId)
+            );
+            const pumpIsOn = zonePump && zonePump.userData.isRunning;
+
+            if (pumpIsOn) {
+                obj.waterEffect.visible = true;
+                updateSprinklerWater(obj.waterEffect);
+            } else {
+                obj.waterEffect.visible = false;
+                // Reset water particles when turning off
+                const lifetimes = obj.waterEffect.lifetimes;
+                for (let i = 0; i < lifetimes.length; i++) {
+                    lifetimes[i] = obj.waterEffect.maxLifetime + 1;
+                }
+            }
         }
-        
+
         // Rotate fan blades when running
         if (obj.userData.type === 'fan' && obj.userData.isRunning && obj.fanBlades) {
-            obj.fanBlades.rotation.y += 0.1; 
+            obj.fanBlades.rotation.y += 0.1;
         }
 
         // Static street light is controlled via applyStaticLightState / window helpers — no DB object needed

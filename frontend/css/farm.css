@@ -311,6 +311,7 @@ canvas {
     position: absolute;
     right: 24px;
     top: 100px;
+    z-index: 200;
     width: min(360px, calc(100vw - 48px));
     max-height: calc(100vh - 150px);
     display: flex;
@@ -565,7 +566,8 @@ canvas {
     border-color: rgba(100, 255, 100, 0.6);
 }
 
-body.modal-open .sensor-float-label {
+body.modal-open .sensor-float-label,
+body.context-menu-open .sensor-float-label {
     visibility: hidden;
     pointer-events: none;
 }

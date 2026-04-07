@@ -87,6 +87,34 @@ class SensorRepository {
       client.release()
     }
   }
+  async getSensorHistory(farmId, limit = 50) {
+    const farmLogsQuery = `
+      SELECT created_at as recorded_at, temperature, humidity, fan, light
+      FROM farm_sensor_logs
+      WHERE farm_id = $1
+      ORDER BY created_at DESC
+      LIMIT $2
+    `;
+
+    const zoneLogsQuery = `
+      SELECT zsl.created_at as recorded_at, zsl.zone_id, z.name AS zone_name, zsl.moisture_1, zsl.pump
+      FROM zone_sensor_logs zsl
+      JOIN zones z ON z.id = zsl.zone_id
+      WHERE z.farm_id = $1
+      ORDER BY zsl.created_at DESC
+      LIMIT $2
+    `;
+
+    const [farmResult, zoneResult] = await Promise.all([
+      pool.query(farmLogsQuery, [farmId, limit]),
+      pool.query(zoneLogsQuery, [farmId, limit * 3])
+    ]);
+
+    return {
+      farm_logs: farmResult.rows.reverse(),
+      zone_logs: zoneResult.rows.reverse()
+    };
+  }
 }
 
 export default new SensorRepository()

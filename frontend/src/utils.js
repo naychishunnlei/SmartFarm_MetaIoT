@@ -166,6 +166,7 @@ export function setupEventListeners(context) {
 
     function showContextMenu(x, y, targetObject) {
         contextMenuTarget = targetObject;
+        document.body.classList.add('context-menu-open');
         const contextMenu = document.getElementById('context-menu');
         if (!contextMenu) return;
 
@@ -262,6 +263,7 @@ export function setupEventListeners(context) {
         if (contextMenu) {
             contextMenu.classList.remove('show');
         }
+        document.body.classList.remove('context-menu-open');
         contextMenuTarget = null;
     }
 
@@ -488,8 +490,8 @@ export function setupEventListeners(context) {
             if (intersects.length > 0) {
                 const clickedObject = findParentGroup(intersects[0].object);
                 if (clickedObject) {
-                    handleSensorClick(clickedObject);
-                    showContextMenu(event.clientX, event.clientY, clickedObject);
+                    handleSensorClick(clickedObject, event.clientX, event.clientY);
+                    contextMenuTarget = clickedObject; // for arrow-key positioning
                 }
             } else {
                 hideContextMenu();
@@ -682,18 +684,25 @@ export function addObject(scene, objectsRef, type, position, dbData = null, obje
 
     obj.userData.growth = 0.2
     
-    if (dbData && dbData.metadata) {
+    if (dbData) {
+        // Always set dbId so position saving works even if metadata is null
         obj.userData.dbId = dbData.id;
         obj.userData.zoneId = dbData.zone_id ?? dbData.zoneId ?? null;
-        obj.userData.isRunning = dbData.metadata.is_running || false;
-        
-        obj.userData.growth = (dbData.metadata.growth !== undefined && dbData.metadata.growth !== null) 
-            ? parseFloat(dbData.metadata.growth) 
-            : 0.4;
 
-        obj.userData.sensorValue = (dbData.metadata.sensor_value !== undefined && dbData.metadata.sensor_value !== null)
-            ? parseFloat(dbData.metadata.sensor_value)
-            : 0.0;
+        if (dbData.metadata) {
+            obj.userData.isRunning = dbData.metadata.is_running || false;
+
+            obj.userData.growth = (dbData.metadata.growth !== undefined && dbData.metadata.growth !== null)
+                ? parseFloat(dbData.metadata.growth)
+                : 0.4;
+
+            obj.userData.sensorValue = (dbData.metadata.sensor_value !== undefined && dbData.metadata.sensor_value !== null)
+                ? parseFloat(dbData.metadata.sensor_value)
+                : 0.0;
+        } else {
+            obj.userData.growth = 0.4;
+            obj.userData.isRunning = false;
+        }
     } else {
         obj.userData.growth = 0.4;
         obj.userData.isRunning = false;

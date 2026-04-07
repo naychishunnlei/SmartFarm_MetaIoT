@@ -32,13 +32,61 @@ class FarmRepository {
     }
 
     async deleteByIdAndUser(farmId, userId) {
-        const query = `
-            DELETE FROM farms
-            WHERE id = $1 AND user_id = $2
-            RETURNING *;
-        `
-        const result = await pool.query(query, [farmId, userId])
-        return result.rows[0]
+        const client = await pool.connect()
+        try {
+            await client.query('BEGIN')
+
+            // Verify ownership first
+            const check = await client.query(
+                'SELECT id FROM farms WHERE id = $1 AND user_id = $2',
+                [farmId, userId]
+            )
+            if (check.rowCount === 0) {
+                await client.query('ROLLBACK')
+                return null
+            }
+
+            // Delete all child records in dependency order
+            // 1. Zone sensor logs (references zones)
+            await client.query(
+                `DELETE FROM zone_sensor_logs WHERE zone_id IN (
+                    SELECT id FROM zones WHERE farm_id = $1
+                )`,
+                [farmId]
+            )
+
+            // 2. Farm sensor logs (references farms)
+            await client.query(
+                'DELETE FROM farm_sensor_logs WHERE farm_id = $1',
+                [farmId]
+            )
+
+            // 3. Objects (references farms and zones)
+            await client.query(
+                'DELETE FROM objects WHERE farm_id = $1',
+                [farmId]
+            )
+
+            // 4. Zones (references farms)
+            await client.query(
+                'DELETE FROM zones WHERE farm_id = $1',
+                [farmId]
+            )
+
+            // 5. Finally delete the farm itself
+            const result = await client.query(
+                'DELETE FROM farms WHERE id = $1 RETURNING *',
+                [farmId]
+            )
+
+            await client.query('COMMIT')
+            return result.rows[0]
+        } catch (error) {
+            await client.query('ROLLBACK')
+            throw error
+        } finally {
+            client.release()
+        }
     }
 }
 

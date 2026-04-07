@@ -108,16 +108,16 @@ class ObjectController {
                 return res.status(400).json({ message: 'is_running boolean value is required' })
             }
 
+            // Get the updated object
             const updatedObject = await objectService.toggleDevice(userId, farmId, objectId, is_running)
             if (!updatedObject) return res.status(404).json({ message: 'Object not found' })
-            
+
             res.status(200).json(updatedObject)
         } catch (error) {
             if (error.message.startsWith('forbidden')) {
-                return res.status(403).json({ message: error.message }) 
+                return res.status(403).json({ message: error.message })
             }
             res.status(400).json({ message: error.message })
-            
         }
     }
 
