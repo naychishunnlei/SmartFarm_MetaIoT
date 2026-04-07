@@ -9,6 +9,10 @@ module.exports = {
     // Map module paths if you use absolute imports
     moduleNameMapper: {
         '^(\\.{1,2}/.*)\\.js$': '$1',
+        // Force shared packages to resolve from the root node_modules so
+        // jest.mock() can intercept them regardless of where the source file lives
+        '^bcryptjs$': '<rootDir>/node_modules/bcryptjs',
+        '^jsonwebtoken$': '<rootDir>/node_modules/jsonwebtoken',
     },
     modulePathIgnorePatterns: [
         '<rootDir>/frontend/',

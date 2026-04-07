@@ -54,15 +54,14 @@ describe('Farm Controller', () => {
             longitude: 20.0
         };
         
-        // Mock the sequence of database queries in the `create` method
+        // Mock the sequence of database queries in the `create` method:
+        // BEGIN → registry check → ownership check → insert farm → insert zone → COMMIT
         mockClient.query
             .mockResolvedValueOnce() // BEGIN
             .mockResolvedValueOnce({ rowCount: 1, rows: [{ zone_count: 1, has_dht: false, has_light: false }] }) // Registry check
             .mockResolvedValueOnce({ rowCount: 0 }) // Ownership check
             .mockResolvedValueOnce({ rows: [{ id: 100, name: 'New Farm' }] }) // Insert Farm
             .mockResolvedValueOnce({ rows: [{ id: 200 }] }) // Insert Zone
-            .mockResolvedValueOnce({}) // Insert Moisture Probe (does not return anything important)
-            .mockResolvedValueOnce({}) // Insert Water Pump
             .mockResolvedValueOnce();  // COMMIT
 
         await farmController.create(req, res);
@@ -72,7 +71,7 @@ describe('Farm Controller', () => {
         expect(mockClient.query).toHaveBeenCalledWith('COMMIT');
         expect(res.status).toHaveBeenCalledWith(201);
         expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-            message: 'Farm successfully claimed and 3D sensors auto-generated!',
+            message: 'Farm successfully claimed!',
             farm: { id: 100, name: 'New Farm' }
         }));
     });

@@ -180,11 +180,16 @@ describe('Object Service', () => {
             const farmId = 1;
             const objectId = 100;
             const isRunning = true;
-            
+
             const mockFarm = { id: 1, user_id: 1, name: 'My Farm' };
             farmRepository.findById.mockResolvedValue(mockFarm);
-            
-            const mockUpdatedObject = { id: 100, farm_id: 1, object_name: 'Pump', metadata: { is_running: true } };
+
+            // 'decoration' is not in ESP32_DEVICE_MAP so the service returns early
+            // without needing zoneRepository or sendCommandToDevice
+            const mockFoundObject = { id: 100, farm_id: 1, object_name: 'decoration', zone_id: null };
+            objectRepository.findById.mockResolvedValue(mockFoundObject);
+
+            const mockUpdatedObject = { id: 100, farm_id: 1, object_name: 'decoration', metadata: { is_running: true } };
             objectRepository.updateIsRunning.mockResolvedValue(mockUpdatedObject);
 
             const result = await objectService.toggleDevice(userId, farmId, objectId, isRunning);
