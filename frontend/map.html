@@ -843,12 +843,12 @@
         const res = await fetch(`${API}/farms/create`, {
             method: 'POST',
             headers: authHeaders(),
-            body: JSON.stringify({ 
-                hardware_id: hwid, 
-                name, 
-                location, 
-                latitude: pendingLat, 
-                longitude: pendingLng 
+            body: JSON.stringify({
+                hardware_id: hwid,
+                name,
+                location,
+                latitude: pendingLat,
+                longitude: pendingLng
             })
         });
 
@@ -856,9 +856,10 @@
         if (!res.ok) throw new Error(result.error || result.message);
 
         createdFarm = normalizeFarm(result.farm);
+        zones = result.zones || []; // Get zones from creation response
         localStorage.setItem('selectedFarmId', createdFarm.id);
         localStorage.setItem('selectedFarm', JSON.stringify(createdFarm));
-        
+
         btn.disabled = false; btn.textContent = 'Next →';
         return true;
       } catch(e) {
@@ -876,15 +877,14 @@
       const errEl  = document.getElementById('zones-error');
       const list   = document.getElementById('zones-list');
 
-      loadEl.style.display = 'flex'; errEl.style.display = 'none'; list.innerHTML = '';
+      loadEl.style.display = 'none'; // Zones should already be loaded
+      errEl.style.display = 'none';
+      list.innerHTML = '';
 
       try {
-        const data = await apiFetch(`/farms/${createdFarm.id}/zones`);
-        zones = Array.isArray(data) ? data : data.zones || data.data || [];
-        loadEl.style.display = 'none';
-
+        // Zones were already created and retrieved during farm creation
         if (zones.length === 0) {
-          list.innerHTML = `<div class="zone-empty"><div class="zone-empty-icon">📭</div>No zones found for this farm.<br>Add zones to your database first.</div>`;
+          list.innerHTML = `<div class="zone-empty"><div class="zone-empty-icon">📭</div>No zones found for this farm.<br>Check your hardware configuration.</div>`;
           return;
         }
 
@@ -899,9 +899,8 @@
           list.appendChild(row);
         });
       } catch(e) {
-        loadEl.style.display = 'none';
         errEl.style.display  = 'block';
-        errEl.textContent    = `Failed to load zones: ${e.message}`;
+        errEl.textContent    = `Error loading zones: ${e.message}`;
       }
     }
 
@@ -1017,91 +1016,50 @@
     }
 
     // ══════════════════════════════════════════════════════
-    //  GENERATE — save objects to DB
+    //  GENERATE — call backend to provision with crops
     // ══════════════════════════════════════════════════════
     async function generateFarm() {
       const errEl = document.getElementById('gen-error');
       const btn   = document.getElementById('btn-next');
       errEl.style.display = 'none';
-      btn.disabled = true; btn.textContent = '⏳ Saving…';
+      btn.disabled = true; btn.textContent = '⏳ Provisioning…';
 
-      const objectsToCreate = [];
-      
-      // 1. Define the centers of our 3 strips within the 16x16 bed
-      // Total width is 16 (-8 to +8). Each strip is 5.33 wide.
-      const zoneXCenters = [-5.33, 0, 5.33]; 
+      try {
+        // Convert cropSelections to a flat array of crop names
+        const crops = [];
+        zones.forEach(z => {
+          Object.entries(cropSelections[z.id] || {}).forEach(([cropType, qty]) => {
+            for (let i = 0; i < qty; i++) {
+              crops.push(cropType);
+            }
+          });
+        });
 
-          try {
-            // NEW: Check Hardware Registry to see how many zones exist for this device
-            // Assuming you have an endpoint for this, or you can just use the 'zones' array 
-            // if your 'zones' variable was already populated by the discovery handshake.
-            const hardwareZoneCount = zones.length; 
-
-            zones.forEach((z, index) => {
-                // Only create objects for zones that the hardware actually reported
-                if (index >= hardwareZoneCount) return;
-
-                const centerX = zoneXCenters[index];
-
-                // 2. Add the Soil Moisture Sensor for THIS zone
-                objectsToCreate.push({
-                    farm_id: createdFarm.id,
-                    zone_id: z.id,
-                    object_name: 'moistureSensor',
-                    category: 'iot',
-                    position_x: centerX + 1.2, // Offset to the right
-                    position_y: 0.1,
-                    position_z: 1.2,
-                    metadata: { sensor_type: 'capacitive' }
-                });
-
-                // 3. Add the Water Pump for THIS zone
-                objectsToCreate.push({
-                    farm_id: createdFarm.id,
-                    zone_id: z.id,
-                    object_name: 'waterPump',
-                    category: 'iot',
-                    position_x: centerX - 1.2, // Offset to the left
-                    position_y: 0.1,
-                    position_z: 1.2,
-                    metadata: { pin: z.pumpPin } 
-                });
-
-                // 4. Add the Crops for THIS zone
-                Object.entries(cropSelections[z.id] || {}).forEach(([cropType, qty]) => {
-                    for (let i = 0; i < qty; i++) {
-                        objectsToCreate.push({
-                            farm_id: createdFarm.id,
-                            zone_id: z.id,
-                            object_name: cropType,
-                            category: 'crops',
-                            position_x: centerX + ((i % 2) * 1.8 - 0.9),
-                            position_y: 0.2,
-                            position_z: (Math.floor(i / 2) * 1.5) - 3,
-                            growth: 0.2
-                        });
-                    }
-                });
-            });
-
-            // 5. Batch save to database
-            await Promise.all(
-                objectsToCreate.map(obj =>
-                    apiFetch(`/farms/${createdFarm.id}/objects`, { 
-                        method:'POST', 
-                        body:JSON.stringify(obj) 
-                    })
-                )
-            );
-
-            // Success UI logic...
-            document.getElementById('success-view').style.display = 'block';
-
-        } catch(e) {
-            console.error("Generation Error:", e);
-            errEl.textContent = `Failed to save: ${e.message}`;
-            btn.disabled = false;
+        if (crops.length === 0) {
+          throw new Error('No crops selected. Please go back and select crops.');
         }
+
+        // Call the backend auto-provision endpoint
+        const res = await fetch(`${API}/farms/${createdFarm.id}/auto-provision`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ crops })
+        });
+
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || result.message);
+
+        // Success UI logic
+        document.getElementById('success-view').style.display = 'block';
+        btn.disabled = false;
+
+      } catch(e) {
+        console.error("Generation Error:", e);
+        errEl.textContent = `Failed to provision farm: ${e.message}`;
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = '🌱 Generate';
+      }
     }
     
     window.launchFarm = function() {

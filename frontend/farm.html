@@ -54,12 +54,16 @@
                         <span class="metric-label">Zones</span>
                     </div>
                     <div class="dashboard-metric">
-                        <span class="metric-value" id="dashboard-object-count">0</span>
-                        <span class="metric-label">Objects</span>
+                        <span class="metric-value" id="dashboard-crop-count">0</span>
+                        <span class="metric-label">Crops</span>
                     </div>
                     <div class="dashboard-metric" id="alerts-metric-btn" style="cursor:pointer;" title="Click to view alerts">
                         <span class="metric-value" id="dashboard-alert-count">0</span>
                         <span class="metric-label">Alerts</span>
+                    </div>
+                    <div class="dashboard-metric">
+                        <span class="metric-value" id="dashboard-sensor-status" style="font-size:11px; color:#ff4444;">● Offline</span>
+                        <span class="metric-label">Sensors</span>
                     </div>
                 </div>
 
@@ -357,6 +361,10 @@
         window.OrbitControls = OrbitControls;
         window.GLTFLoader = GLTFLoader;
     </script>
+    <!-- Chart.js for analytics panel -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script type="module" src="./src/main.js"></script>
 
 </body>

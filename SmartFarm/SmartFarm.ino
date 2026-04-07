@@ -46,6 +46,11 @@ bool  tankIsLow      = false;
 float currentTemp    = 0.0;
 float currentHumidity = 0.0;   // ✅ Global so all tasks share the same reading
 
+// Track last auto-set state globally so webSocketEvent can update them
+// when a manual override arrives — otherwise controlLogicTask never re-fires
+bool lastPumpState[sizeof(zones) / sizeof(zones[0])] = {};
+bool lastFanState = false;
+
 bool alarmActive   = false;
 bool buzzerDone    = false;
 unsigned long alarmStartTime = 0;
@@ -154,9 +159,6 @@ void readSensorsTask(void *pvParameters) {
 
 // ---------------- CONTROL LOGIC ----------------
 void controlLogicTask(void *pvParameters) {
-  static bool lastPumpState[sizeof(zones) / sizeof(zones[0])] = {};
-  static bool lastFanState = false;
-
   for (;;) {
     updateAlarm();
     updateLight();   // ✅ Time-based light control runs every cycle
@@ -236,14 +238,13 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
     case WStype_CONNECTED: {
       Serial.println("[WS] Connected to server — sending discovery");
 
-      // Report hardware capabilities so the backend can auto-provision zones & sensors
       String discovery = "{";
       discovery += "\"type\":\"discovery\",";
       discovery += "\"hardware_id\":\"" + hardwareID + "\",";
       discovery += "\"zones\":"         + String(activeZones) + ",";
-      discovery += "\"has_dht\":true,";    // DHT11 for temp + humidity
-      discovery += "\"has_moisture\":true,";  // soil moisture sensors per zone
-      discovery += "\"has_light\":true";   // street light relay
+      discovery += "\"has_dht\":true,";
+      discovery += "\"has_moisture\":true,";
+      discovery += "\"has_light\":true";
       discovery += "}";
 
       webSocket.sendTXT(discovery);
@@ -256,7 +257,57 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
 
     case WStype_TEXT: {
       String msg = String((char*)payload);
-      Serial.println("[WS] Server → " + msg);
+      Serial.println("[WS] Received: " + msg);
+
+      if (msg.indexOf("\"type\":\"control\"") >= 0) {
+        Serial.println("[CONTROL] Processing control command...");
+
+        String device = "";
+        int deviceIdx = msg.indexOf("\"device\":\"");
+        if (deviceIdx >= 0) {
+          int startIdx = deviceIdx + 10;
+          int endIdx = msg.indexOf("\"", startIdx);
+          device = msg.substring(startIdx, endIdx);
+        }
+
+        int state = -1;
+        int stateIdx = msg.indexOf("\"state\":");
+        if (stateIdx >= 0) {
+          sscanf(msg.c_str() + stateIdx, "\"state\":%d", &state);
+        }
+
+        int zone_id = 0;
+        int zoneIdx = msg.indexOf("\"zone_id\":");
+        if (zoneIdx >= 0) {
+          sscanf(msg.c_str() + zoneIdx, "\"zone_id\":%d", &zone_id);
+        }
+
+        Serial.printf("[CONTROL] device=%s, zone_id=%d, state=%d\n", device.c_str(), zone_id, state);
+
+        if (device == "pump" && zone_id > 0 && state >= 0) {
+          for (int i = 0; i < activeZones; i++) {
+            if (zones[i].id == zone_id) {
+              bool turnOn = (state == 1);
+              digitalWrite(zones[i].pumpPin, turnOn ? LOW : HIGH);
+              lastPumpState[i] = turnOn;  // sync so auto-logic can re-fire correctly
+              Serial.printf("├─ [PUMP] Zone %d → %s (pin %d)\n",
+                zone_id, turnOn ? "ON ✓" : "OFF ✓", zones[i].pumpPin);
+              break;
+            }
+          }
+        } else if (device == "fan" && state >= 0) {
+          bool turnOn = (state == 1);
+          digitalWrite(FAN_RELAY, turnOn ? LOW : HIGH);
+          lastFanState = turnOn;  // sync so auto-logic can re-fire correctly
+          Serial.printf("├─ [FAN] → %s (pin %d)\n", turnOn ? "ON ✓" : "OFF ✓", FAN_RELAY);
+        } else if (device == "light" && state >= 0) {
+          bool turnOn = (state == 1);
+          digitalWrite(LIGHT_RELAY, turnOn ? LOW : HIGH);
+          Serial.printf("├─ [LIGHT] → %s (pin %d)\n", turnOn ? "ON ✓" : "OFF ✓", LIGHT_RELAY);
+        }
+
+        Serial.println("[CONTROL] ✓ Command executed\n");
+      }
       break;
     }
 
