@@ -21,8 +21,11 @@ jobs:
           node-version: 18.x
           cache: npm
 
-      - name: Install dependencies
+      - name: Install root dependencies
         run: npm install
 
+      - name: Install backend dependencies
+        run: cd backend && npm install
+
       - name: Run tests
-        run: node --experimental-vm-modules ./node_modules/jest/bin/jest.js
+        run:  node --experimental-vm-modules ./node_modules/jest/bin/jest.js
