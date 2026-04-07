@@ -10,22 +10,11 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18.x
-          cache: npm
-
-      - name: Install root dependencies
+      - uses: actions/checkout@v3
+      - name: Install Root dependencies
         run: npm install
-
-      - name: Install backend dependencies
+      - name: Install Backend dependencies
         run: cd backend && npm install
-
-      - name: Run tests
-        run:  node --experimental-vm-modules ./node_modules/jest/bin/jest.js
+      - name: Run Unit Tests
+        run: node --experimental-vm-modules ./node_modules/jest/bin/jest.js
