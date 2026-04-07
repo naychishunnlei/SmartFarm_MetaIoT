@@ -17,4 +17,4 @@ jobs:
       - name: Install Backend dependencies
         run: cd backend && npm install
       - name: Run Unit Tests
-        run: node --experimental-vm-modules ./node_modules/jest/bin/jest.js
+        run: npx jest
