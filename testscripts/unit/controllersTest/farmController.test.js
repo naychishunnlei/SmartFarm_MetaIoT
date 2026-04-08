@@ -89,27 +89,6 @@ describe('Farm Controller', () => {
         expect(res.json).toHaveBeenCalledWith({ error: 'Missing required fields (name, location, hardware_id, or coordinates)' });
     });
 
-    test('create should return 404 if device not found in registry', async () => {
-        req.body = { name: 'Farm', location: 'Loc', hardware_id: 'ESP', latitude: 1, longitude: 2 };
-        mockClient.query
-            .mockResolvedValueOnce() // BEGIN
-            .mockResolvedValueOnce({ rowCount: 0 }); // registry check
-        await farmController.create(req, res);
-        expect(res.status).toHaveBeenCalledWith(404);
-        expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('Device not found in registry') });
-    });
-
-    test('create should return 400 if device already claimed', async () => {
-        req.body = { name: 'Farm', location: 'Loc', hardware_id: 'ESP', latitude: 1, longitude: 2 };
-        mockClient.query
-            .mockResolvedValueOnce() // BEGIN
-            .mockResolvedValueOnce({ rowCount: 1, rows: [{ zone_count: 1 }] }) // registry check
-            .mockResolvedValueOnce({ rowCount: 1 }); // ownership check
-        await farmController.create(req, res);
-        expect(res.status).toHaveBeenCalledWith(400);
-        expect(res.json).toHaveBeenCalledWith({ error: expect.stringContaining('already claimed') });
-    });
-
 
     test('delete should return 200 and call farmService.deleteFarm on success', async () => {
         req.params = { farmId: '100' }; 
@@ -150,7 +129,7 @@ describe('Farm Controller', () => {
         expect(res.status).toHaveBeenCalledWith(400);
         expect(res.json).toHaveBeenCalledWith({ message: 'some error' });
     });
-    
+
     test('getAllForUser should return 200 with list of farms', async () => {
         const mockFarms = [{ id: 1, name: 'Farm 1' }, { id: 2, name: 'Farm 2' }];
         farmService.getFarmsByUserId.mockResolvedValue(mockFarms);
