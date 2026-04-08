@@ -103,17 +103,15 @@ body {
 }
 
 .modal .btn-primary {
-    /* background: linear-gradient(135deg, var(--leaf), var(--leaf-glow)); */
-    color: #111;
+    background: var(--primary-color);
+    color: #fff;
     font-weight: bold;
-    box-shadow: 0 4px 16px rgba(94, 163, 116, 0.25);
     border: none;
 }
 
 .modal .btn-primary:hover:not(:disabled) {
     transform: translateY(-2px);
-    /* box-shadow: 0 8px 20px rgba(94, 163, 116, 0.4); */
-    background: var(--primary-color);
+    background: var(--secondary-color);
     color: #fff;
 }
 

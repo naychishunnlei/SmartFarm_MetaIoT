@@ -743,9 +743,24 @@ window._manualToggleStaticLight = async function(isOn) {
 };
 
 // Called from "Resume Auto" button in side panel
-window._resumeAutoStaticLight = function() {
+window._resumeAutoStaticLight = async function() {
     staticLightManualOverride = false;
     window._staticLightManualOverride = false;
+    // Clear manualOverride on the DB object so inspect panel shows Auto mode
+    const lightObj = objects.find(o => o.userData.type === 'streetLight');
+    if (lightObj) lightObj.userData.manualOverride = false;
+
+    // Sync ESP32 relay back to the current auto state (day/night schedule)
+    const resumeFarmId = localStorage.getItem('selectedFarmId');
+    if (resumeFarmId && lightObj?.userData.dbId) {
+        try {
+            await toggleDevice(resumeFarmId, lightObj.userData.dbId, isNightMode);
+        } catch (e) {
+            console.warn('[Light] Failed to sync ESP32 relay on resume auto:', e);
+        }
+    }
+
+    applyStaticLightState(isNightMode);
     if (window._refreshSidePanel) window._refreshSidePanel();
 };
 

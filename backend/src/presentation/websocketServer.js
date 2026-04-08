@@ -35,6 +35,107 @@ export function sendCommandToDevice(hardware_id, command) {
     return false;
 }
 
+// Called on every discovery. Adds or removes zones (and their default objects)
+// so the DB always matches what the ESP32 is reporting.
+async function syncZonesForHardware(hardware_id, reportedZoneCount) {
+    const client = await pool.connect();
+    try {
+        // Find the farm linked to this hardware
+        const farmResult = await client.query(
+            'SELECT * FROM farms WHERE hardware_id = $1 LIMIT 1',
+            [hardware_id]
+        );
+        if (farmResult.rowCount === 0) return; // farm not created yet — nothing to sync
+
+        const farm = farmResult.rows[0];
+        const farmId = farm.id;
+
+        const zonesResult = await client.query(
+            'SELECT * FROM zones WHERE farm_id = $1 ORDER BY id ASC',
+            [farmId]
+        );
+        const existingZones = zonesResult.rows;
+        const currentCount = existingZones.length;
+
+        if (currentCount === reportedZoneCount) {
+            console.log(`[SYNC] Farm ${farmId} already has ${currentCount} zone(s) — no change needed.`);
+            return;
+        }
+
+        await client.query('BEGIN');
+
+        if (reportedZoneCount > currentCount) {
+            // ── Add missing zones ─────────────────────────────────────────────
+            console.log(`[SYNC] Farm ${farmId}: adding zones ${currentCount + 1}–${reportedZoneCount}`);
+            for (let i = currentCount + 1; i <= reportedZoneCount; i++) {
+                const zoneRes = await client.query(
+                    'INSERT INTO zones (farm_id, name) VALUES ($1, $2) RETURNING *',
+                    [farmId, `Zone ${i}`]
+                );
+                const newZone = zoneRes.rows[0];
+                const zoneIndex = i - 1;
+
+                // Mirror the layout logic from autoProvisionFarm
+                const zStart  = -6 + zoneIndex * 4;
+                const zEnd    = zStart + 4;
+                const zCenter = (zStart + zEnd) / 2;
+                const xCenter = zoneIndex * 5;
+
+                // soilBed
+                await client.query(
+                    `INSERT INTO objects (farm_id, zone_id, object_name, category, position_x, position_y, position_z, metadata)
+                     VALUES ($1,$2,'soilBed','infrastructure',$3,0,$4,'{}')`,
+                    [farmId, newZone.id, xCenter, zCenter]
+                );
+                // moistureSensor
+                await client.query(
+                    `INSERT INTO objects (farm_id, zone_id, object_name, category, position_x, position_y, position_z, metadata)
+                     VALUES ($1,$2,'moistureSensor','iot',$3,0.1,$4,$5)`,
+                    [farmId, newZone.id, xCenter, zCenter, JSON.stringify({ is_running: false, sensor_value: 0 })]
+                );
+                // waterPump
+                await client.query(
+                    `INSERT INTO objects (farm_id, zone_id, object_name, category, position_x, position_y, position_z, metadata)
+                     VALUES ($1,$2,'waterPump','iot',$3,0.1,$4,$5)`,
+                    [farmId, newZone.id, xCenter - 2, zStart, JSON.stringify({ is_running: false, sensor_value: 0 })]
+                );
+                // 3 sprinklers
+                const sprinklerPositions = [
+                    { x: xCenter - 1.5, z: zStart + 1.5 },
+                    { x: xCenter,       z: zCenter       },
+                    { x: xCenter + 1.5, z: zEnd   - 1.5  },
+                ];
+                for (const pos of sprinklerPositions) {
+                    await client.query(
+                        `INSERT INTO objects (farm_id, zone_id, object_name, category, position_x, position_y, position_z, metadata)
+                         VALUES ($1,$2,'sprinkler','iot',$3,0.1,$4,$5)`,
+                        [farmId, newZone.id, pos.x, pos.z, JSON.stringify({ is_running: false, sensor_value: 0 })]
+                    );
+                }
+                console.log(`[SYNC] Zone ${i} created with default objects for farm ${farmId}.`);
+            }
+        } else {
+            // ── Remove extra zones (last N zones + their objects) ─────────────
+            const toRemove = existingZones.slice(reportedZoneCount);
+            console.log(`[SYNC] Farm ${farmId}: removing ${toRemove.length} extra zone(s)`);
+            for (const zone of toRemove) {
+                await client.query('DELETE FROM zone_sensor_logs WHERE zone_id = $1', [zone.id]);
+                await client.query('DELETE FROM objects WHERE zone_id = $1', [zone.id]);
+                await client.query('DELETE FROM zones WHERE id = $1', [zone.id]);
+                console.log(`[SYNC] Zone ${zone.id} (${zone.name}) removed from farm ${farmId}.`);
+            }
+        }
+
+        await client.query('COMMIT');
+        console.log(`[SYNC] Farm ${farmId} now has ${reportedZoneCount} zone(s).`);
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('[SYNC] Zone sync failed:', err.message);
+    } finally {
+        client.release();
+    }
+}
+
 export default function initWebSocket(server) {
     const wss = new WebSocketServer({ server, path: '/ws' })
 
@@ -67,9 +168,11 @@ export default function initWebSocket(server) {
                             last_seen = CURRENT_TIMESTAMP;
                     `;
 
-                    // This will now work because 'pool' is imported!
                     await pool.query(discoveryQuery, [hardware_id, zones, has_dht, has_light]);
                     console.log(`[DISCOVERY] Specs for ${hardware_id} saved to registry.`);
+
+                    // ── Auto-sync zones for any farm linked to this hardware ──
+                    await syncZonesForHardware(hardware_id, zones);
 
                     ws.send(JSON.stringify({ status: "recognized", message: "Hardware specs registered" }));
                     return;
@@ -113,11 +216,25 @@ export default function initWebSocket(server) {
             }
         })
 
+        // Keep connection alive — ESP32 WebSocketsClient drops if no traffic for ~15s
+        const pingInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) ws.ping();
+        }, 10000);
+
         ws.on('close', () => {
-            console.log('Device disconnected')
+            clearInterval(pingInterval);
             if (connectedHardwareId) {
-                deviceConnections.delete(connectedHardwareId);
+                // Only remove from map if this is still the active socket.
+                // If the ESP32 reconnected quickly, discovery already replaced it —
+                // deleting here would wipe the new valid entry.
+                if (deviceConnections.get(connectedHardwareId) === ws) {
+                    deviceConnections.delete(connectedHardwareId);
+                    console.log(`[WS] ESP32 ${connectedHardwareId} disconnected`);
+                } else {
+                    console.log(`[WS] Stale socket closed for ${connectedHardwareId} — active connection preserved`);
+                }
             }
+            // Browser clients (no hardware_id) silently close — no log noise
         })
     })
 

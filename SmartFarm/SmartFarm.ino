@@ -19,6 +19,7 @@ const int   daylightOffset_sec = 0;
 #define WATER_LEVEL_PIN 27
 #define BUZZER_PIN      25
 #define RED_LED_PIN     26
+#define YELLOW_LED_PIN  4
 #define FAN_RELAY       19
 #define LIGHT_RELAY     23
 #define BUTTON_PIN      32
@@ -102,7 +103,8 @@ void updateLight() {
   bool lightShouldBeOn = (hour >= 18 || hour < 6);   // ON 6pm–6am
 
   if (lightShouldBeOn != lastLightState) {
-    digitalWrite(LIGHT_RELAY, lightShouldBeOn ? LOW : HIGH);  // relay: LOW = ON
+    digitalWrite(LIGHT_RELAY,     lightShouldBeOn ? LOW  : HIGH); // relay: LOW = ON
+    digitalWrite(YELLOW_LED_PIN,  lightShouldBeOn ? HIGH : LOW);  // LED:   HIGH = ON
     lastLightState = lightShouldBeOn;
 
     char timeStr[20];
@@ -215,9 +217,10 @@ void sendDataTask(void *pvParameters) {
         json += "\"temperature\":"   + tempStr + ",";
         json += "\"humidity\":"      + humStr  + ",";
         json += "\"moisture_1\":"    + String(zones[i].moisture) + ",";
-        json += "\"pump\":"          + String(pumpOn  ? "true" : "false") + ",";
-        json += "\"fan\":"           + String(fanOn   ? "true" : "false") + ",";
-        json += "\"light\":"         + String(lightOn ? "true" : "false");
+        json += "\"pump\":"          + String(pumpOn     ? "true" : "false") + ",";
+        json += "\"fan\":"           + String(fanOn     ? "true" : "false") + ",";
+        json += "\"light\":"         + String(lightOn   ? "true" : "false") + ",";
+        json += "\"tank_low\":"      + String(tankIsLow ? "true" : "false");
         json += "}";
 
         bool sent = webSocket.sendTXT(json);
@@ -288,8 +291,13 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
           for (int i = 0; i < activeZones; i++) {
             if (zones[i].id == zone_id) {
               bool turnOn = (state == 1);
+              // Safety: never turn pump ON if tank is low
+              if (turnOn && tankIsLow) {
+                Serial.printf("├─ [PUMP] Zone %d → ON blocked (tank low)\n", zone_id);
+                break;
+              }
               digitalWrite(zones[i].pumpPin, turnOn ? LOW : HIGH);
-              lastPumpState[i] = turnOn;  // sync so auto-logic can re-fire correctly
+              lastPumpState[i] = turnOn;
               Serial.printf("├─ [PUMP] Zone %d → %s (pin %d)\n",
                 zone_id, turnOn ? "ON ✓" : "OFF ✓", zones[i].pumpPin);
               break;
@@ -302,7 +310,8 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
           Serial.printf("├─ [FAN] → %s (pin %d)\n", turnOn ? "ON ✓" : "OFF ✓", FAN_RELAY);
         } else if (device == "light" && state >= 0) {
           bool turnOn = (state == 1);
-          digitalWrite(LIGHT_RELAY, turnOn ? LOW : HIGH);
+          digitalWrite(LIGHT_RELAY,    turnOn ? LOW  : HIGH);
+          digitalWrite(YELLOW_LED_PIN, turnOn ? HIGH : LOW);
           Serial.printf("├─ [LIGHT] → %s (pin %d)\n", turnOn ? "ON ✓" : "OFF ✓", LIGHT_RELAY);
         }
 
@@ -322,8 +331,9 @@ void setup() {
   Serial.println("\n[BOOT] Starting Smart Farm System...");
 
   // Output pins
-  pinMode(BUZZER_PIN,  OUTPUT);  digitalWrite(BUZZER_PIN,  LOW);
-  pinMode(RED_LED_PIN, OUTPUT);  digitalWrite(RED_LED_PIN, LOW);
+  pinMode(BUZZER_PIN,     OUTPUT);  digitalWrite(BUZZER_PIN,     LOW);
+  pinMode(RED_LED_PIN,    OUTPUT);  digitalWrite(RED_LED_PIN,    LOW);
+  pinMode(YELLOW_LED_PIN, OUTPUT);  digitalWrite(YELLOW_LED_PIN, LOW);
   pinMode(FAN_RELAY,   OUTPUT);  digitalWrite(FAN_RELAY,   HIGH);  // HIGH = OFF for relay
   pinMode(LIGHT_RELAY, OUTPUT);  digitalWrite(LIGHT_RELAY, HIGH);  // HIGH = OFF for relay
 

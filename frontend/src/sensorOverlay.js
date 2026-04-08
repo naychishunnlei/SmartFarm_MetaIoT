@@ -184,7 +184,15 @@ function buildLabelHTML(obj) {
             const emoji = type === 'waterPump' ? '⛽' : '🚿';
             if (!isSensorOnline()) return `<span class="label-icon">${emoji}</span><span style="color:#888">--</span>`;
             const on = obj.userData.isRunning;
-            return `<span class="label-icon">${emoji}</span><span style="color:${on ? '#44ff88' : '#aaaaaa'}">${on ? 'ON' : 'OFF'}</span><span style="margin-left:4px;font-size:9px;opacity:0.7">${obj.userData.manualOverride ? '🔧' : ''}</span>`;
+            const farm = getLatestFarmData();
+            const tankLow = farm?.tankLow;
+            const zoneId2 = obj.userData.zoneId || obj.userData.zone_id;
+            const zoneData2 = getLatestZoneData(zoneId2);
+            const moisture2 = zoneData2?.moisture ?? 0;
+            const pct2 = Math.max(0, Math.min(100, 100 - (moisture2 / 4095) * 100));
+            const soilDry = pct2 < 30;
+            const tankWarning = !on && soilDry && tankLow ? `<span style="margin-left:4px;font-size:9px;color:#ff6644;">⚠️tank</span>` : '';
+            return `<span class="label-icon">${emoji}</span><span style="color:${on ? '#44ff88' : '#aaaaaa'}">${on ? 'ON' : 'OFF'}</span>${tankWarning}<span style="margin-left:4px;font-size:9px;opacity:0.7">${obj.userData.manualOverride ? '🔧' : ''}</span>`;
         }
 
         case 'fan': {
@@ -304,10 +312,13 @@ function updateSidePanel(farm, zones) {
         const lightOn = online ? (window._currentStaticLightState ?? f.lightOn) : false;
         const isManualLight = !!window._staticLightManualOverride;
 
+        const tankLow = online && f.tankLow;
         farmStatsEl.innerHTML = `
+            ${tankLow ? `<div style="background:#cc2222;color:white;padding:6px 10px;border-radius:6px;margin-bottom:8px;font-weight:bold;font-size:12px;text-align:center;">⚠️ WATER TANK LOW — Pumps disabled</div>` : ''}
             <div class="zone-stats" style="margin-bottom:8px;">
                 <div class="zone-stat"><span class="zone-stat-label">Temp</span><span class="zone-stat-value">${online ? f.temperature?.toFixed(1) + '°C' : '--'}</span></div>
                 <div class="zone-stat"><span class="zone-stat-label">Humidity</span><span class="zone-stat-value">${online ? f.humidity?.toFixed(0) + '%' : '--'}</span></div>
+                <div class="zone-stat"><span class="zone-stat-label">Tank</span><span class="zone-stat-value" style="color:${online ? (tankLow ? '#ff4444' : '#44ff88') : '#888'}">${online ? (tankLow ? '🔴 LOW' : '🟢 OK') : '--'}</span></div>
                 <div class="zone-stat"><span class="zone-stat-label">Fan</span><span class="zone-stat-value">${online ? (f.fanOn ? '🟢 ON' : '⚫ OFF') : '⚫ --'}</span></div>
                 <div class="zone-stat" style="grid-column: span 2; display:flex; align-items:center; justify-content:space-between;">
                     <div>
@@ -335,6 +346,12 @@ function updateSidePanel(farm, zones) {
         const pump = findPumpForZone(parseInt(zoneId));
         const pumpOn = isOnline ? (pump ? pump.userData.isRunning : data.pumpOn) : false;
         const isManualPump = pump?.userData?.manualOverride;
+        const tankLow = isOnline && _lastFarm?.tankLow;
+        const isDry = isOnline && pct < 30;
+        // Explain why pump is off when soil is dry but pump isn't running
+        const pumpOffReason = isOnline && !pumpOn && isDry
+            ? (tankLow ? ' — tank empty' : ' — auto')
+            : '';
         return `
             <div class="zone-card" style="margin-top:8px;">
                 <div class="zone-card-header">
@@ -348,7 +365,7 @@ function updateSidePanel(farm, zones) {
                     <div class="zone-stat" style="grid-column: span 2; display:flex; align-items:center; justify-content:space-between;">
                         <div>
                             <span class="zone-stat-label">Pump${isManualPump ? ' 🔧' : ''}</span>
-                            <span class="zone-stat-value" style="margin-top:4px;">${isOnline ? (pumpOn ? '🟢 ON' : '⚫ OFF') : '⚫ --'}</span>
+                            <span class="zone-stat-value" style="margin-top:4px;">${isOnline ? (pumpOn ? '🟢 ON' : `⚫ OFF<span style="color:#ff8844;font-size:10px;">${pumpOffReason}</span>`) : '⚫ --'}</span>
                         </div>
                         <div style="display:flex; gap:6px;">
                             ${isOnline && pump ? ctrlBtn(pumpOn ? 'Turn OFF' : 'Turn ON', `window._toggleZonePump(${zoneId},${!pumpOn})`, pumpOn ? '#cc4444' : '#44bb66') : ''}
@@ -372,6 +389,11 @@ function findPumpForZone(zoneId) {
 
 // Zone pump toggle (manual override)
 window._toggleZonePump = async function(zoneId, newState) {
+    // Block turning pump ON when tank is low
+    if (newState && getLatestFarmData()?.tankLow) {
+        alert('Cannot turn pump ON — water tank is empty.');
+        return;
+    }
     const pump = findPumpForZone(parseInt(zoneId));
     if (!pump) return;
     const farmId = localStorage.getItem('selectedFarmId');
@@ -380,7 +402,7 @@ window._toggleZonePump = async function(zoneId, newState) {
     try {
         await toggleDevice(farmId, objectId, newState);
         pump.userData.isRunning = newState;
-        pump.userData.manualOverride = true; // Set flag to indicate manual control
+        pump.userData.manualOverride = true;
         window._refreshSidePanel?.();
     } catch(e) {
         console.error('[Zone Pump] Toggle failed:', e);
@@ -457,6 +479,24 @@ function overrideBtn(newState) {
 // Exposed to window so inline onclick works
 window._farmToggleDevice = async function(newState) {
     if (!inspectTarget) return;
+    const type = inspectTarget.userData.type;
+
+    // Block pump/sprinkler ON when tank is low
+    if (newState && (type === 'waterPump' || type === 'sprinkler') && getLatestFarmData()?.tankLow) {
+        alert('Cannot turn pump ON — water tank is empty.');
+        return;
+    }
+
+    // streetLight: delegate entirely to _manualToggleStaticLight which correctly
+    // sets BOTH the module-level staticLightManualOverride AND window property,
+    // updates the visual, and sends the command to the ESP32.
+    if (type === 'streetLight') {
+        inspectTarget.userData.manualOverride = true;
+        await window._manualToggleStaticLight?.(newState);
+        showInspectPanel(inspectTarget);
+        return;
+    }
+
     const farmId = localStorage.getItem('selectedFarmId');
     const objectId = inspectTarget.userData.dbId;
     if (!farmId || !objectId) return;
@@ -464,12 +504,6 @@ window._farmToggleDevice = async function(newState) {
         await toggleDevice(farmId, objectId, newState);
         inspectTarget.userData.isRunning = newState;
         inspectTarget.userData.manualOverride = true;
-        // For streetLight, also update the 3D lamp visuals
-        if (inspectTarget.userData.type === 'streetLight') {
-            window._staticLightManualOverride = true;
-            window._applyStaticLightState?.(newState);
-            window._refreshSidePanel?.();
-        }
         showInspectPanel(inspectTarget);
     } catch(e) {
         console.error('[Override] Toggle failed:', e);
