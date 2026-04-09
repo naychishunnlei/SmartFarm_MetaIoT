@@ -313,6 +313,9 @@ function updateSidePanel(farm, zones) {
         const online = isSensorOnline();
         const lightOn = online ? (window._currentStaticLightState ?? f.lightOn) : false;
         const isManualLight = !!window._staticLightManualOverride;
+        const fanObj = objectsRef?.find(o => o.userData.type === 'fan');
+        const fanOn = online ? (fanObj ? fanObj.userData.isRunning : f.fanOn) : false;
+        const isManualFan = !!fanObj?.userData?.manualOverride;
 
         const tankLow = online && f.tankLow;
         farmStatsEl.innerHTML = `
@@ -321,7 +324,16 @@ function updateSidePanel(farm, zones) {
                 <div class="zone-stat"><span class="zone-stat-label">Temp</span><span class="zone-stat-value">${online ? f.temperature?.toFixed(1) + '°C' : '--'}</span></div>
                 <div class="zone-stat"><span class="zone-stat-label">Humidity</span><span class="zone-stat-value">${online ? f.humidity?.toFixed(0) + '%' : '--'}</span></div>
                 <div class="zone-stat"><span class="zone-stat-label">Tank</span><span class="zone-stat-value" style="color:${online ? (tankLow ? '#ff4444' : '#44ff88') : '#888'}">${online ? (tankLow ? '🔴 LOW' : '🟢 OK') : '--'}</span></div>
-                <div class="zone-stat"><span class="zone-stat-label">Fan</span><span class="zone-stat-value">${online ? (f.fanOn ? '🟢 ON' : '⚫ OFF') : '⚫ --'}</span></div>
+                <div class="zone-stat" style="grid-column: span 2; display:flex; align-items:center; justify-content:space-between;">
+                    <div>
+                        <span class="zone-stat-label">Fan${isManualFan ? ' 🔧' : ''}</span>
+                        <span class="zone-stat-value" style="margin-top:4px;">${online ? (fanOn ? '🟢 ON' : '⚫ OFF') : '⚫ --'}</span>
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        ${online && fanObj ? ctrlBtn(fanOn ? 'Turn OFF' : 'Turn ON', `window._manualToggleFan(${!fanOn})`, fanOn ? '#cc4444' : '#44bb66') : ''}
+                        ${isManualFan ? ctrlBtn('Auto', `window._resumeAutoFan()`, '#555') : ''}
+                    </div>
+                </div>
                 <div class="zone-stat" style="grid-column: span 2; display:flex; align-items:center; justify-content:space-between;">
                     <div>
                         <span class="zone-stat-label">Light${isManualLight ? ' 🔧' : ''}</span>

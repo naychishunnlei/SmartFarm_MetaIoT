@@ -778,6 +778,40 @@ window._resumeAutoStaticLight = async function() {
     if (window._refreshSidePanel) window._refreshSidePanel();
 };
 
+// ─── FAN CONTROL (dashboard) ──────────────────────────────────────────────────
+window._manualToggleFan = async function(isOn) {
+    const farmId = localStorage.getItem('selectedFarmId');
+    if (!farmId) return;
+    const fanObj = objects.find(o => o.userData.type === 'fan' && o.userData.dbId);
+    if (!fanObj) return;
+    try {
+        await toggleDevice(farmId, fanObj.userData.dbId, isOn);
+        fanObj.userData.isRunning = isOn;
+        fanObj.userData.manualOverride = true;
+        if (window._refreshSidePanel) window._refreshSidePanel();
+    } catch (e) {
+        console.warn('[Fan] Failed to toggle:', e);
+    }
+};
+
+window._resumeAutoFan = async function() {
+    const farmId = localStorage.getItem('selectedFarmId');
+    const fanObj = objects.find(o => o.userData.type === 'fan' && o.userData.dbId);
+    if (!fanObj) return;
+    fanObj.userData.manualOverride = false;
+    const farm = getLatestFarmData();
+    const shouldBeOn = farm ? farm.temperature > 24 : false;
+    if (farmId) {
+        try {
+            await toggleDevice(farmId, fanObj.userData.dbId, shouldBeOn);
+        } catch (e) {
+            console.warn('[Fan] Failed to resume auto:', e);
+        }
+    }
+    fanObj.userData.isRunning = shouldBeOn;
+    if (window._refreshSidePanel) window._refreshSidePanel();
+};
+
 function createIrrigationSystem() {
     const tankMaterial = new THREE.MeshStandardMaterial({ color: 0x2196F3, roughness: 0.3, metalness: 0.2 });
     const pipeMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.5 });
