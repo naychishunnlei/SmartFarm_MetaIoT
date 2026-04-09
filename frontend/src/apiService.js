@@ -48,6 +48,7 @@ export const deleteObject = (farmId, objectId) => request(`/farms/${farmId}/obje
 export const deleteAllObjects = (farmId) => request(`/farms/${farmId}/objects`, 'DELETE')
 export const updateObjectGrowth = (farmId, objectId, growth) => request(`/farms/${farmId}/objects/${objectId}/growth`, 'PUT', { growth })
 export const toggleDevice = (farmId, objectId, is_running) => request(`/farms/${farmId}/objects/${objectId}/toggle`, 'PUT', { is_running })
+export const controlFarmDevice = (farmId, device, state) => request(`/farms/${farmId}/control`, 'POST', { device, state })
 
 // --- Zone Endpoints ---
 export const getZonesForFarm = (farmId) => request(`/farms/${farmId}/zones`, 'GET')

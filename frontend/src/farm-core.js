@@ -1,4 +1,4 @@
-import { getObjectsForFarm, toggleDevice, updateObjectGrowth, getZonesForFarm } from './apiService.js';
+import { getObjectsForFarm, toggleDevice, controlFarmDevice, updateObjectGrowth, getZonesForFarm } from './apiService.js';
 import { addObject, setupEventListeners } from './utils.js';
 import { initSensorWebSocket, getLatestFarmData, isSensorOnline } from './sensorService.js';
 import { initSensorOverlay, updateFloatingLabels } from './sensorOverlay.js';
@@ -14,9 +14,8 @@ let sunLight;
 let hemiLight;
 let fillLight;
 let isNightMode = false
-let streetLightPointLights = []
-let streetLightMaterial = null
 let staticLightManualOverride = false
+let simulationLightActive = false    // true when user has toggled simulation (visual only, no ESP32 command)
 let userAvatar = null
 let avatarTarget = new THREE.Vector3()
 
@@ -488,7 +487,8 @@ export async function init() {
         scene,
         ground,
         objectsRef: objects,
-        objectConfigs
+        objectConfigs,
+        controls
     };
     setupEventListeners(context);
 
@@ -628,7 +628,6 @@ function createEnvironment() {
 
     // Add decorative elements
     createFarmFence()
-    createStreetLights()
     createIrrigationSystem()
     // createDecorations();
 }
@@ -703,14 +702,16 @@ function createFarmFence() {
     }
 }
 
-// ─── STATIC STREET LIGHT CONTROL ─────────────────────────────────────────────
+// ─── STREET LIGHT CONTROL ─────────────────────────────────────────────────────
+// Drives the DB streetLight object's bulb glow and spotlight intensity
 function applyStaticLightState(isOn) {
     window._currentStaticLightState = isOn;
-    if (streetLightMaterial) streetLightMaterial.emissiveIntensity = isOn ? 1.5 : 0;
-    streetLightPointLights.forEach(l => l.intensity = isOn ? 300 : 0);
-    // Keep DB object userData in sync so inspect panel shows correct state
     const lightObj = objects.find(o => o.userData.type === 'streetLight');
-    if (lightObj) lightObj.userData.isRunning = isOn;
+    if (lightObj) {
+        if (lightObj.bulbMaterial) lightObj.bulbMaterial.emissiveIntensity = isOn ? 1.5 : 0;
+        if (lightObj.spotLight)    lightObj.spotLight.intensity = isOn ? 300 : 0;
+        lightObj.userData.isRunning = isOn;
+    }
 }
 
 // Exposed so sensorOverlay can call it from _farmToggleDevice
@@ -718,7 +719,8 @@ window._applyStaticLightState = applyStaticLightState;
 
 // Called from sensorOverlay when ESP32 data arrives
 window._setStaticLightFromSensor = function(isOn) {
-    if (staticLightManualOverride) return;
+    // Don't override if user has manual control OR simulation is active
+    if (staticLightManualOverride || simulationLightActive) return;
     applyStaticLightState(isOn);
     if (window._refreshSidePanel) window._refreshSidePanel();
 };
@@ -726,106 +728,56 @@ window._setStaticLightFromSensor = function(isOn) {
 // Called from side panel manual toggle button
 window._manualToggleStaticLight = async function(isOn) {
     staticLightManualOverride = true;
+    simulationLightActive = false;    // manual override supersedes simulation
     window._staticLightManualOverride = true;
     applyStaticLightState(isOn);
     if (window._refreshSidePanel) window._refreshSidePanel();
 
-    // Send command to ESP32 via the streetLight DB object
+    // Send command to ESP32
     const farmId = localStorage.getItem('selectedFarmId');
+    if (!farmId) return;
     const lightObj = objects.find(o => o.userData.type === 'streetLight' && o.userData.dbId);
-    if (farmId && lightObj) {
-        try {
+    try {
+        if (lightObj) {
             await toggleDevice(farmId, lightObj.userData.dbId, isOn);
-        } catch (e) {
-            console.warn('[Light] Failed to send toggle command to ESP32:', e);
+        } else {
+            // Fallback: no DB object found — send direct farm control command
+            console.warn('[Light] No streetLight DB object found — using direct farm control endpoint');
+            await controlFarmDevice(farmId, 'light', isOn);
         }
+    } catch (e) {
+        console.warn('[Light] Failed to send toggle command to ESP32:', e);
     }
 };
 
 // Called from "Resume Auto" button in side panel
 window._resumeAutoStaticLight = async function() {
     staticLightManualOverride = false;
+    simulationLightActive = false;
     window._staticLightManualOverride = false;
     // Clear manualOverride on the DB object so inspect panel shows Auto mode
     const lightObj = objects.find(o => o.userData.type === 'streetLight');
     if (lightObj) lightObj.userData.manualOverride = false;
 
-    // Sync ESP32 relay back to the current auto state (day/night schedule)
+    // Use the latest real ESP32 state, not the simulation state
+    const latestFarm = getLatestFarmData();
+    const autoState = latestFarm ? latestFarm.lightOn : isNightMode;
+
+    // Tell ESP32 to resume time-based auto control (state -1 = resume auto)
     const resumeFarmId = localStorage.getItem('selectedFarmId');
-    if (resumeFarmId && lightObj?.userData.dbId) {
+    if (resumeFarmId) {
         try {
-            await toggleDevice(resumeFarmId, lightObj.userData.dbId, isNightMode);
+            // state: null signals the backend to send state:-1 to ESP32 → clears lightManualOverride
+            await controlFarmDevice(resumeFarmId, 'light', null);
         } catch (e) {
-            console.warn('[Light] Failed to sync ESP32 relay on resume auto:', e);
+            console.warn('[Light] Failed to signal ESP32 to resume auto:', e);
         }
     }
 
-    applyStaticLightState(isNightMode);
+    applyStaticLightState(autoState);
     if (window._refreshSidePanel) window._refreshSidePanel();
 };
 
-function createStreetLights() {
-    const metalMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7, metalness: 0.8 });
-    
-    streetLightMaterial = new THREE.MeshStandardMaterial({
-        color: 0xffffaa,
-        emissive: 0xfff0aa,
-        emissiveIntensity: isNightMode ? 2 : 0
-    });
-
-   
-    streetLightPointLights = [];
-
-    const positions = [
-        { x: -11, z: 11 },
-    
-    ];
-
-    positions.forEach(pos => {
-        const group = new THREE.Group();
-        group.position.set(pos.x, 0, pos.z);
-        
-        group.lookAt(0, 0, 0);
-        group.rotateY(-Math.PI / 2);
-
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 4, 8), metalMaterial);
-        pole.position.y = 2;
-        pole.castShadow = true;
-        group.add(pole);
-
-        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.2, 8), metalMaterial);
-        arm.rotation.z = Math.PI / 2;
-        arm.position.set(0.5, 3.8, 0); 
-        group.add(arm);
-
-        const lamp = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.3, 8), metalMaterial);
-        lamp.position.set(1.0, 3.7, 0);
-        group.add(lamp);
-
-        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), streetLightMaterial);
-        bulb.position.set(1.0, 3.65, 0);
-        group.add(bulb);
-
-        const light = new THREE.SpotLight(0xfff0aa, isNightMode ? 300 : 0);
-        light.position.set(1.0, 3.5, 0);
-        light.angle = Math.PI / 3;    // 60° cone — covers the farm
-        light.penumbra = 0.5;
-        light.decay = 2;              // physically correct falloff
-        light.distance = 30;          // reaches across the farm
-        light.castShadow = false;
-
-        const targetObject = new THREE.Object3D();
-        targetObject.position.set(20, -2, 0); 
-        group.add(targetObject);
-        light.target = targetObject;
-        
-        group.add(light);
-        streetLightPointLights.push(light); 
-
-
-        scene.add(group);
-    });
-}
 function createIrrigationSystem() {
     const tankMaterial = new THREE.MeshStandardMaterial({ color: 0x2196F3, roughness: 0.3, metalness: 0.2 });
     const pipeMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.5 });
@@ -909,8 +861,7 @@ function applyDayNightLighting(night) {
         fillLight.intensity = 0.32;
         renderer.toneMappingExposure = 0.78;
 
-        // night: turn on static light as default (ESP32/manual can still override)
-        staticLightManualOverride = false;
+        // Night sky: turn on the street light visual
         applyStaticLightState(true);
     } else {
         ambientLight.color.setHex(0xffffff);
@@ -924,8 +875,7 @@ function applyDayNightLighting(night) {
         fillLight.intensity = 0.5;
         renderer.toneMappingExposure = 1.2;
 
-        // turn off static light
-        staticLightManualOverride = false;
+        // Day sky: turn off the street light visual
         applyStaticLightState(false);
     }
 }
@@ -952,6 +902,7 @@ function setupDayNightToggle() {
 
     btn.addEventListener('click', () => {
         isNightMode = !isNightMode;
+        simulationLightActive = true;   // user is simulating — block ESP32 from overriding visual
         localStorage.setItem('farmverseSkyNight', isNightMode ? '1' : '0');
 
         if (skyTexture) skyTexture.dispose();
@@ -1151,7 +1102,7 @@ function animate() {
 
         // Rotate fan blades when running
         if (obj.userData.type === 'fan' && obj.userData.isRunning && obj.fanBlades) {
-            obj.fanBlades.rotation.y += 0.1;
+            obj.fanBlades.rotation.z += 0.08;
         }
 
         // Static street light is controlled via applyStaticLightState / window helpers — no DB object needed

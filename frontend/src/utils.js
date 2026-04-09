@@ -3,8 +3,8 @@ import { createObject as createObjectMesh } from "./objects";
 import { handleSensorClick } from "./sensorOverlay";
 
 export function setupEventListeners(context) {
-    const { renderer, camera, scene, ground, objectsRef, objectConfigs } = context;
-    
+    const { renderer, camera, scene, ground, objectsRef, objectConfigs, controls } = context;
+
     // Local state variables
     let objects = objectsRef;
     let selectedObjectType = null;
@@ -12,6 +12,14 @@ export function setupEventListeners(context) {
     let raycaster = new THREE.Raycaster();
     let mouse = new THREE.Vector2();
     let contextMenuTarget = null;
+
+    // Drag-to-move state
+    let dragObject = null;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let isDragging = false;
+    const DRAG_THRESHOLD = 5; // pixels
+    const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
     // ===== Helper Functions (Closure Access) =====
     
@@ -527,8 +535,81 @@ export function setupEventListeners(context) {
     }
 
 
+    // ===== Drag to Move =====
+    function onPointerDown(event) {
+        if (event.button !== 0) return;
+        if (selectedObjectType || deleteMode) return;
+
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        const objectMeshes = [];
+        objects.forEach(obj => obj.traverse(child => { if (child.isMesh) objectMeshes.push(child); }));
+        const intersects = raycaster.intersectObjects(objectMeshes);
+        if (intersects.length > 0) {
+            dragObject = findParentGroup(intersects[0].object);
+            dragStartX = event.clientX;
+            dragStartY = event.clientY;
+            isDragging = false;
+            // Update dragPlane to the object's Y so it drags at the right height
+            dragPlane.constant = -dragObject.position.y;
+        }
+    }
+
+    function onPointerMove(event) {
+        if (!dragObject) return;
+
+        const dx = event.clientX - dragStartX;
+        const dy = event.clientY - dragStartY;
+        if (!isDragging && Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return;
+
+        isDragging = true;
+        if (controls) controls.enabled = false;
+
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        const target = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(dragPlane, target)) {
+            dragObject.position.x = target.x;
+            dragObject.position.z = target.z;
+        }
+    }
+
+    async function onPointerUp() {
+        if (!dragObject) return;
+        if (controls) controls.enabled = true;
+
+        if (isDragging) {
+            // Save new position to DB
+            const farmId = localStorage.getItem('selectedFarmId');
+            const dbId = dragObject.userData.dbId;
+            if (farmId && dbId) {
+                try {
+                    await updateObjectPosition(farmId, dbId, {
+                        position_x: dragObject.position.x,
+                        position_y: dragObject.position.y,
+                        position_z: dragObject.position.z
+                    });
+                } catch (e) {
+                    console.error('[Drag] Failed to save position:', e);
+                }
+            }
+        }
+
+        dragObject = null;
+        isDragging = false;
+    }
+
     // ===== Event Listener Setup =====
     window.addEventListener('resize', onWindowResize);
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
     renderer.domElement.addEventListener('click', onCanvasClick);
     renderer.domElement.addEventListener('contextmenu', onCanvasRightClick);
 

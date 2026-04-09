@@ -422,8 +422,7 @@
       <div class="progress-labels">
         <div class="prog-label active" data-step="1"><div class="num">1</div><span>Setup</span></div>
         <div class="prog-label"        data-step="2"><div class="num">2</div><span>Zones</span></div>
-        <div class="prog-label"        data-step="3"><div class="num">3</div><span>Crops</span></div>
-        <div class="prog-label"        data-step="4"><div class="num">4</div><span>Generate</span></div>
+        <div class="prog-label"        data-step="3"><div class="num">3</div><span>Generate</span></div>
       </div>
       <div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
     </div>
@@ -458,7 +457,7 @@
     <div class="step-panel" id="step-2">
       <div class="step-tag">Step 02</div>
       <div class="step-title">Confirm zones</div>
-      <div class="step-desc">These zones were loaded from your database. Review them before assigning crops.</div>
+      <div class="step-desc">These zones were loaded from your hardware configuration. Review them before generating.</div>
 
       <div id="zones-loading" class="loading-state" style="display:none"><div class="spinner"></div> Loading zones…</div>
       <div id="zones-error"   class="error-msg"    style="display:none"></div>
@@ -467,19 +466,12 @@
 
     <div class="step-panel" id="step-3">
       <div class="step-tag">Step 03</div>
-      <div class="step-title">Assign crops</div>
-      <div class="step-desc">Pick what's planted in each zone. You can choose multiple crops and set quantities.</div>
-      <div id="crop-picker"></div>
-    </div>
-
-    <div class="step-panel" id="step-4">
-      <div class="step-tag">Step 04</div>
       <div class="step-title">Generate farm</div>
-      <div class="step-desc">Review what will be created, then hit Generate to save to the database.</div>
+      <div class="step-desc">Review your zones, then hit Generate to auto-provision sensors and actuators.</div>
       <div id="summary-grid"></div>
       <div class="gen-estimate">
         <span>🌾</span>
-        <span><strong id="gen-count">0</strong> crop objects across <strong id="gen-zone-count">0</strong> zones.</span>
+        <span>Sensors &amp; actuators will be created for <strong id="gen-zone-count">0</strong> zone(s).</span>
       </div>
       <div id="gen-error"   class="error-msg"    style="display:none"></div>
       <div id="gen-success" class="success-msg"  style="display:none"></div>
@@ -581,15 +573,6 @@
     // ══════════════════════════════════════════════════════
     const API = 'http://localhost:5001/api';
 
-    const CROPS = [
-      { type: 'tomato',    name: 'Tomato',    emoji: '🍅' },
-      { type: 'carrot',    name: 'Carrot',    emoji: '🥕' },
-      { type: 'corn',      name: 'Corn',      emoji: '🌽' },
-      { type: 'wheat',     name: 'Wheat',     emoji: '🌾' },
-      { type: 'sunflower', name: 'Sunflower', emoji: '🌻' },
-      { type: 'cabbage',   name: 'Cabbage',   emoji: '🥬' },
-    ];
-
     const ZONE_ICONS = ['🌿','🌱','🍃','🪴','🌾','🌻'];
 
     const THAILAND_BOUNDS = [[5.5,97.2],[20.7,106.2]];
@@ -600,9 +583,8 @@
     let wizStep        = 1;
     let pendingLat     = null;
     let pendingLng     = null;
-    let createdFarm    = null;   
+    let createdFarm    = null;
     let zones          = [];
-    let cropSelections = {};     
     let previewMarker  = null;
 
     // ══════════════════════════════════════════════════════
@@ -756,8 +738,7 @@
 
     map.on('click', onMapClick);
 
-    // 🌟 FIX: Change from 'load' to 'pageshow' so hitting the browser back button forces a refresh
-    window.addEventListener('pageshow', (event) => {
+    window.addEventListener('load', () => {
       if (!localStorage.getItem('farmverseToken')) {
         setStatus('You must be logged in. Redirecting…', true);
         setTimeout(() => window.location.href = 'index.html', 2500);
@@ -773,7 +754,6 @@
       wizStep        = 1;
       createdFarm    = null;
       zones          = [];
-      cropSelections = {};
 
       document.getElementById('farm-name').value     = '';
       document.getElementById('farm-hwid').value = '';
@@ -903,114 +883,26 @@
     }
 
     // ══════════════════════════════════════════════════════
-    //  STEP 3 — Crop picker
-    // ══════════════════════════════════════════════════════
-    function renderCropPicker() {
-      const picker = document.getElementById('crop-picker');
-      picker.innerHTML = '';
-
-      if (zones.length === 0) {
-        picker.innerHTML = '<div class="zone-empty"><div class="zone-empty-icon">⚠️</div>No zones to assign crops to.</div>';
-        return;
-      }
-
-      zones.forEach((z, i) => {
-        const zid = z.id;
-        if (!cropSelections[zid]) cropSelections[zid] = {};
-
-        const block = document.createElement('div');
-        block.className = 'zone-crop-block';
-        block.innerHTML = `
-          <div class="zone-crop-header">
-            <span style="font-size:13px">${ZONE_ICONS[i % ZONE_ICONS.length]}</span>
-            <div class="zone-crop-label">${z.name || `Zone ${zid}`}</div>
-            <div class="zone-crop-divider"></div>
-          </div>
-          <div class="crop-grid" id="crop-grid-${zid}"></div>
-        `;
-        picker.appendChild(block);
-
-        const grid = block.querySelector(`#crop-grid-${zid}`);
-        CROPS.forEach(crop => {
-          const chip = document.createElement('div');
-          chip.className = 'crop-chip';
-          chip.dataset.zoneId   = zid;
-          chip.dataset.cropType = crop.type;
-          chip.innerHTML = `
-            <div class="check">✓</div>
-            <div class="emoji">${crop.emoji}</div>
-            <div class="crop-name">${crop.name}</div>
-            <div class="crop-qty">
-              <button class="qty-btn" onclick="changeQty(event,'${zid}','${crop.type}',-1)">−</button>
-              <div class="qty-display" id="qty-${zid}-${crop.type}">1</div>
-              <button class="qty-btn" onclick="changeQty(event,'${zid}','${crop.type}',+1)">+</button>
-            </div>
-          `;
-          chip.addEventListener('click', e => {
-            if (e.target.classList.contains('qty-btn')) return;
-            const sel = chip.classList.toggle('selected');
-            if (sel) {
-              cropSelections[zid][crop.type] = cropSelections[zid][crop.type] || 1;
-              document.getElementById(`qty-${zid}-${crop.type}`).textContent = cropSelections[zid][crop.type];
-            } else {
-              delete cropSelections[zid][crop.type];
-            }
-            updateNav();
-          });
-          if (cropSelections[zid][crop.type] > 0) chip.classList.add('selected');
-          grid.appendChild(chip);
-        });
-      });
-    }
-
-    window.changeQty = function(e, zoneId, cropType, delta) {
-      e.stopPropagation();
-      const cur  = cropSelections[zoneId]?.[cropType] || 1;
-      const next = Math.max(1, Math.min(20, cur + delta));
-      cropSelections[zoneId][cropType] = next;
-      const el = document.getElementById(`qty-${zoneId}-${cropType}`);
-      if (el) el.textContent = next;
-    };
-
-    function hasCropSelections() {
-      return zones.some(z => Object.keys(cropSelections[z.id] || {}).length > 0);
-    }
-
-    // ══════════════════════════════════════════════════════
-    //  STEP 4 — Summary
+    //  STEP 3 — Summary
     // ══════════════════════════════════════════════════════
     function renderSummary() {
       const grid = document.getElementById('summary-grid');
       grid.innerHTML = '';
-      let total = 0, zonesWithCrops = 0;
 
       zones.forEach((z, i) => {
-        const entries  = Object.entries(cropSelections[z.id] || {});
-        const zTotal   = entries.reduce((s, [,q]) => s + q, 0);
-        total         += zTotal;
-        if (zTotal > 0) zonesWithCrops++;
-
         const row = document.createElement('div');
         row.className = 'summary-zone-row';
-        const cropsHtml = entries.length > 0
-          ? entries.map(([type, qty]) => {
-              const c = CROPS.find(x => x.type === type);
-              return `<span class="summary-crop-tag">${c?.emoji||''} ${c?.name||type} ×${qty}</span>`;
-            }).join('')
-          : '<span class="summary-none">No crops assigned</span>';
-
         row.innerHTML = `
           <div class="summary-zone-icon">${ZONE_ICONS[i % ZONE_ICONS.length]}</div>
           <div>
             <div class="summary-zone-name">${z.name || `Zone ${z.id}`}</div>
-            <div class="summary-crops">${cropsHtml}</div>
+            <div class="summary-crops"><span class="summary-crop-tag">💧 Moisture sensor</span><span class="summary-crop-tag">🚿 Pump</span><span class="summary-crop-tag">🌊 Sprinklers ×3</span></div>
           </div>
         `;
         grid.appendChild(row);
       });
 
-      document.getElementById('gen-count').textContent      = total;
-      document.getElementById('gen-zone-count').textContent = zonesWithCrops;
+      document.getElementById('gen-zone-count').textContent = zones.length;
     }
 
     // ══════════════════════════════════════════════════════
@@ -1023,25 +915,11 @@
       btn.disabled = true; btn.textContent = '⏳ Provisioning…';
 
       try {
-        // Convert cropSelections to a flat array of crop names
-        const crops = [];
-        zones.forEach(z => {
-          Object.entries(cropSelections[z.id] || {}).forEach(([cropType, qty]) => {
-            for (let i = 0; i < qty; i++) {
-              crops.push(cropType);
-            }
-          });
-        });
-
-        if (crops.length === 0) {
-          throw new Error('No crops selected. Please go back and select crops.');
-        }
-
-        // Call the backend auto-provision endpoint
+        // Auto-provision sensors and actuators (no crops at creation time)
         const res = await fetch(`${API}/farms/${createdFarm.id}/auto-provision`, {
           method: 'POST',
           headers: authHeaders(),
-          body: JSON.stringify({ crops })
+          body: JSON.stringify({ crops: [] })
         });
 
         const result = await res.json();
@@ -1076,12 +954,8 @@
       } else if (wizStep === 2) {
         if (zones.length === 0) return;
         wizStep = 3;
-        renderCropPicker();
-      } else if (wizStep === 3) {
-        if (!hasCropSelections()) return;
-        wizStep = 4;
         renderSummary();
-      } else if (wizStep === 4) {
+      } else if (wizStep === 3) {
         await generateFarm();
         return;
       }
@@ -1108,7 +982,7 @@
     }
 
     function updateProgress() {
-      const pct = ((wizStep - 1) / 3) * 100;
+      const pct = ((wizStep - 1) / 2) * 100;
       document.getElementById('prog-fill').style.width = `${pct}%`;
       document.querySelectorAll('.prog-label').forEach(el => {
         const s = parseInt(el.dataset.step);
@@ -1123,7 +997,7 @@
       const next = document.getElementById('btn-next');
       back.style.visibility = wizStep === 1 ? 'hidden' : 'visible';
 
-      if (wizStep === 4) {
+      if (wizStep === 3) {
         next.textContent = '🌱 Generate';
         next.disabled    = false;
       } else {
@@ -1135,7 +1009,6 @@
     function canProceed() {
       if (wizStep === 1) return true; // validation runs on click
       if (wizStep === 2) return zones.length > 0;
-      if (wizStep === 3) return hasCropSelections();
       return true;
     }
 

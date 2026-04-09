@@ -190,14 +190,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Forward Gatekeeper ---
-    // If they already have a token, automatically send them to the map
-    // so they don't have to log in again if they refresh the index page.
-    const token = localStorage.getItem('farmverseToken');
-    if (token) {
-        console.log('Active session found. Forwarding to map...');
-        window.location.href = 'map.html';
-    }
 });
 
 // --- Global Logout Function ---

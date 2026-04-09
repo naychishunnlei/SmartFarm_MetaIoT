@@ -738,10 +738,10 @@ function createSprinklerWater(position) {
 
 function createStreetLight(group) {
     const metalMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7, metalness: 0.8 });
-    const lightMaterial = new THREE.MeshStandardMaterial({ 
-        color: 0xffffaa, 
-        emissive: 0xfff0aa, 
-        emissiveIntensity: 0 
+    const lightMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffaa,
+        emissive: 0xfff0aa,
+        emissiveIntensity: 0
     });
 
     // Pole
@@ -750,9 +750,10 @@ function createStreetLight(group) {
     pole.castShadow = true;
     group.add(pole);
 
+    // Horizontal arm
     const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.2, 8), metalMaterial);
     arm.rotation.z = Math.PI / 2;
-    arm.position.set(0.5, 3.8, 0); 
+    arm.position.set(0.5, 3.8, 0);
     group.add(arm);
 
     // Lamp cap
@@ -765,24 +766,21 @@ function createStreetLight(group) {
     bulb.position.set(1.0, 3.65, 0);
     group.add(bulb);
 
-    // SpotLight (Actual lighting)
-    const light = new THREE.SpotLight(0xfff0aa, 0); 
+    // SpotLight
+    const light = new THREE.SpotLight(0xfff0aa, 0);
     light.position.set(1.0, 3.5, 0);
-    light.angle = Math.PI / 2.5; 
+    light.angle = Math.PI / 3;
     light.penumbra = 0.5;
-    light.decay = 0.6;
-    light.distance = 0; 
+    light.decay = 2;
+    light.distance = 30;
     light.castShadow = false;
 
-    // Target slightly down and forward
     const targetObject = new THREE.Object3D();
-    targetObject.position.set(20, -2, 0); 
+    targetObject.position.set(20, -2, 0);
     group.add(targetObject);
     light.target = targetObject;
-    
     group.add(light);
 
-    // Save references to toggle them later
     group.bulbMaterial = lightMaterial;
     group.spotLight = light;
     group.userData.isRunning = false;
@@ -790,39 +788,61 @@ function createStreetLight(group) {
 
 
 function createFan(group) {
-    const motorMaterial = new THREE.MeshStandardMaterial({ color: 0x8b7355 });
-    const bladeMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
-    const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x696969 });
+    const metalMaterial = new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.5, metalness: 0.7 });
+    const bladeMaterial = new THREE.MeshStandardMaterial({ color: 0xddeeff, roughness: 0.3, metalness: 0.2, side: THREE.DoubleSide });
+    const baseMaterial  = new THREE.MeshStandardMaterial({ color: 0x333344, roughness: 0.6, metalness: 0.8 });
 
-    // Fan pole
-    const fanPoleGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1, 8);
-    const fanPole = new THREE.Mesh(fanPoleGeometry, poleMaterial);
-    fanPole.position.y = 1.5;
-    fanPole.castShadow = true;
-    group.add(fanPole);
+    // ── Base (flat disk on the ground) ──
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.08, 16), baseMaterial);
+    base.position.y = 0.04;
+    base.castShadow = true;
+    group.add(base);
 
-    // Fan motor housing
-    const motorGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.4, 4);
-    const motor = new THREE.Mesh(motorGeometry, motorMaterial);
-    motor.position.y = 1.0;
-    motor.castShadow = true;
-    group.add(motor);
+    // ── Vertical pole ──
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.5, 8), metalMaterial);
+    pole.position.y = 0.83;   // bottom at 0.08, top at 1.58
+    pole.castShadow = true;
+    group.add(pole);
 
-    // Fan blades group (rotatable)
+    // ── Neck (tilt joint) ──
+    const neck = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), metalMaterial);
+    neck.position.y = 1.58;
+    group.add(neck);
+
+    // ── Motor hub (center of blades) ──
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.15, 8), metalMaterial);
+    hub.rotation.x = Math.PI / 2;   // faces forward (+Z)
+    hub.position.y = 1.65;
+    group.add(hub);
+
+    // ── Guard ring ──
+    const guard = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.035, 8, 32), metalMaterial);
+    guard.position.y = 1.65;
+    // guard already faces +Z by default (torus lies in XY plane)
+    group.add(guard);
+
+    // ── Blades group — rotates around Z axis (faces forward) ──
     const fanGroup = new THREE.Group();
-    fanGroup.position.y = 0.95;
+    fanGroup.position.y = 1.65;
     fanGroup.name = 'bladeGroup';
-    fanGroup.userData.isRotating = false;
 
-    // Create 3 fan blades
     for (let i = 0; i < 3; i++) {
-        const bladeGeometry = new THREE.BoxGeometry(2, 0.05, 0.4);
-        const blade = new THREE.Mesh(bladeGeometry, bladeMaterial);
-        blade.rotation.y = (i / 3) * Math.PI * 2;
+        const blade = new THREE.Mesh(
+            new THREE.BoxGeometry(0.44, 0.06, 0.16),
+            bladeMaterial
+        );
+        // Spread blades 120° apart around Z axis
+        blade.rotation.z = (i / 3) * Math.PI * 2;
+        // Offset each blade from center so it sits inside the guard
+        blade.position.set(
+            Math.cos((i / 3) * Math.PI * 2) * 0.22,
+            Math.sin((i / 3) * Math.PI * 2) * 0.22,
+            0
+        );
         blade.castShadow = true;
         fanGroup.add(blade);
     }
-    
+
     group.add(fanGroup);
     group.fanBlades = fanGroup;
     group.userData.isRunning = false;

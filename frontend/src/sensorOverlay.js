@@ -4,8 +4,8 @@
 // - Side panel live stats
 // - Click-to-inspect panel
 
-import { getLatestFarmData, getLatestZoneData, onSensorUpdate, isSensorOnline } from './sensorService.js';
 import { toggleDevice } from './apiService.js';
+import { getLatestFarmData, getLatestZoneData, isSensorOnline, onSensorUpdate } from './sensorService.js';
 
 let camera, renderer, scene, objectsRef;
 let labelMap = new Map();       // objectId → DOM element
@@ -57,6 +57,9 @@ function updateObjectUserData(farm, zones) {
         if (type === 'fan' && farm) {
             obj.userData.isRunning = farm.fanOn;
         }
+        if (type === 'streetLight' && farm && !window._staticLightManualOverride) {
+            obj.userData.isRunning = farm.lightOn;
+        }
         if ((type === 'waterPump' || type === 'sprinkler') && zoneData) {
             // If not manually overridden, sync with sensor data from ESP32
             if (!obj.userData.manualOverride) {
@@ -90,7 +93,7 @@ export function updateFloatingLabels() {
         const id   = obj.userData.id || obj.uuid;
 
         // Only show labels on IoT sensors/actuators
-        const showTypes = ['moistureSensor','tempSensor','humiditySensor','waterPump','fan','sprinkler','streetLight'];
+        const showTypes = ['moistureSensor','tempSensor','humiditySensor','waterPump','fan','streetLight'];
         if (!showTypes.includes(type)) return;
 
         seen.add(id);
@@ -133,7 +136,6 @@ export function updateFloatingLabels() {
             el.style.pointerEvents = 'auto';
             el.style.cursor = 'pointer';
             el.onclick = () => {
-                const zoneId = obj.userData.zoneId || obj.userData.zone_id;
                 window._toggleZonePump(zoneId, !obj.userData.isRunning);
             };
         } else if (type === 'streetLight') {
@@ -459,7 +461,8 @@ export function handleSensorClick(object, clickX, clickY) {
     if (!type) return;
 
     const showTypes = ['moistureSensor','tempSensor','humiditySensor','waterPump','fan','sprinkler','streetLight'];
-    if (!showTypes.includes(type)) return;
+    const isCrop = object?.userData?.category === 'crops';
+    if (!showTypes.includes(type) && !isCrop) return;
 
     inspectTarget = object;
     showInspectPanel(object, clickX, clickY);
@@ -557,6 +560,15 @@ function createInspectPanel() {
         box-shadow: 0 4px 20px rgba(0,0,0,0.6);
     `;
     document.getElementById('farm-container')?.appendChild(inspectPanel);
+
+    // Close on click-outside
+    document.addEventListener('click', (e) => {
+        if (inspectPanel && inspectPanel.style.display !== 'none') {
+            if (!inspectPanel.contains(e.target) && e.target !== inspectTarget?.userData?.element) {
+                inspectPanel.style.display = 'none';
+            }
+        }
+    });
 }
 
 let _inspectClickX = 0;
@@ -574,6 +586,41 @@ function showInspectPanel(obj, clickX, clickY) {
     const znMap = window._zoneNameMap;
     const znLabel = znMap?.get(Number(zoneId)) ?? `Zone ${zoneId}`;
     let content = `<div style="font-weight:bold; margin-bottom:10px; color:#88ff88">${getLabel(type)}</div>`;
+
+    if (obj.userData.category === 'crops') {
+        const growth = obj.userData.growth ?? 0;
+        const pct = Math.round(growth * 100);
+        const color = pct >= 100 ? '#44ff88' : pct >= 50 ? '#ffaa00' : '#ff6644';
+        content += row('Growth', `<span style="color:${color}">${pct}%</span>`);
+        content += row('Stage', pct >= 100 ? '🌿 Mature' : pct >= 50 ? '🌱 Growing' : '🌰 Seedling');
+        content += `<button onclick="document.getElementById('sensor-inspect-panel').style.display='none'"
+            style="margin-top:12px; width:100%; background:rgba(255,255,255,0.1);
+            border:none; color:white; padding:6px; border-radius:6px; cursor:pointer;">
+            Close
+        </button>`;
+        inspectPanel.innerHTML = content;
+        inspectPanel.style.display = 'block';
+        requestAnimationFrame(() => {
+            const pw = inspectPanel.offsetWidth  || 240;
+            const ph = inspectPanel.offsetHeight || 200;
+            const margin = 16;
+            const offset = 8;
+
+            let x = _inspectClickX + offset;
+            let y = _inspectClickY - (ph / 2);
+
+            if (x + pw > window.innerWidth - margin) {
+                x = _inspectClickX - pw - offset;
+            }
+
+            x = Math.max(margin, Math.min(window.innerWidth - pw - margin, x));
+            y = Math.max(margin, Math.min(window.innerHeight - ph - margin, y));
+            inspectPanel.style.left = `${x}px`;
+            inspectPanel.style.top  = `${y}px`;
+        });
+        return;
+    }
+
     content += `<div style="color:#aaa; margin-bottom:8px; font-size:11px">${znLabel}</div>`;
 
     switch (type) {
@@ -618,12 +665,14 @@ function showInspectPanel(obj, clickX, clickY) {
             break;
         }
         case 'streetLight': {
-            const isOn = obj.userData.isRunning;
+            // Use _currentStaticLightState as the authoritative source (set by applyStaticLightState)
+            const isOn = window._currentStaticLightState ?? obj.userData.isRunning ?? false;
             content += row('Status', isOn ? '🟡 ON' : '⚫ OFF');
-            if (obj.userData.manualOverride) content += row('Mode', '🔧 Manual Override');
+            const isManual = window._staticLightManualOverride || obj.userData.manualOverride;
+            if (isManual) content += row('Mode', '🔧 Manual Override');
             else content += row('Control', 'Auto (ESP32)');
             content += overrideBtn(!isOn);
-            if (obj.userData.manualOverride) {
+            if (isManual) {
                 content += `<button onclick="window._clearOverride()" style="margin-top:4px; width:100%; background:rgba(255,255,255,0.07); border:none; color:#aaa; padding:5px; border-radius:6px; cursor:pointer; font-size:11px;">↩ Resume Auto</button>`;
             }
             break;
@@ -639,17 +688,26 @@ function showInspectPanel(obj, clickX, clickY) {
     inspectPanel.innerHTML = content;
     inspectPanel.style.display = 'block';
 
-    // Position near the click, clamped to stay on screen
+    // Position panel near the object (to the right or above, with smart boundaries)
     requestAnimationFrame(() => {
         const pw = inspectPanel.offsetWidth  || 240;
         const ph = inspectPanel.offsetHeight || 200;
-        const margin = 12;
-        let x = _inspectClickX + margin;
-        let y = _inspectClickY + margin;
-        if (x + pw > window.innerWidth  - margin) x = _inspectClickX - pw - margin;
-        if (y + ph > window.innerHeight - margin) y = _inspectClickY - ph - margin;
-        x = Math.max(margin, x);
-        y = Math.max(margin, y);
+        const margin = 16;
+        const offset = 8;  // offset from click point
+
+        // Try right side first
+        let x = _inspectClickX + offset;
+        let y = _inspectClickY - (ph / 2);  // vertically center on click
+
+        // If too far right, move to left
+        if (x + pw > window.innerWidth - margin) {
+            x = _inspectClickX - pw - offset;
+        }
+
+        // Clamp to screen
+        x = Math.max(margin, Math.min(window.innerWidth - pw - margin, x));
+        y = Math.max(margin, Math.min(window.innerHeight - ph - margin, y));
+
         inspectPanel.style.left = `${x}px`;
         inspectPanel.style.top  = `${y}px`;
     });
@@ -673,6 +731,12 @@ function getLabel(type) {
         sprinkler: '🚿 Sprinkler',
         fan: '🌀 Fan',
         streetLight: '💡 Street Light',
+        tomato: '🍅 Tomato',
+        carrot: '🥕 Carrot',
+        corn: '🌽 Corn',
+        wheat: '🌾 Wheat',
+        sunflower: '🌻 Sunflower',
+        cabbage: '🥬 Cabbage',
     };
     return labels[type] || type;
 }

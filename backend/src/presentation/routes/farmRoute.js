@@ -11,6 +11,7 @@ router.post('/:farmId/auto-provision', farmController.autoProvisionFarm)
 router.post('/', farmController.getOrCreate)
 router.get('/', farmController.getAllForUser)
 router.get('/:farmId/history', farmController.getSensorHistory)
+router.post('/:farmId/control', farmController.controlDevice)
 router.delete('/:farmId', farmController.delete)
 
 export default router;

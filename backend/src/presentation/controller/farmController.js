@@ -98,8 +98,8 @@ await client.query('COMMIT');
 
             const { crops = [] } = req.body;
 
-            if (!Array.isArray(crops) || crops.length === 0) {
-                return res.status(400).json({ error: 'At least one crop must be selected' });
+            if (!Array.isArray(crops)) {
+                return res.status(400).json({ error: 'crops must be an array' });
             }
 
             const client = await pool.connect();
@@ -142,11 +142,14 @@ await client.query('COMMIT');
 
                 for (const zone of zones) {
                     const zoneIndex = zones.indexOf(zone);
-                    // Layout for each zone: z ranges from -6 to 6
-                    const zStart = -6 + (zoneIndex) * 4;
-                    const zEnd = zStart + 4;
-                    const zCenter = (zStart + zEnd) / 2;
-                    const xCenter = (zoneIndex) * 5;
+
+                    // Farm rows run along X (-8 to +8), stacked in Z.
+                    // 3 zones × 5 rows each, spaced 1 unit apart:
+                    //   Zone 0: rows at z = -7,-6,-5,-4,-3  (firstRow = -7)
+                    //   Zone 1: rows at z = -2,-1, 0, 1, 2  (firstRow = -2)
+                    //   Zone 2: rows at z =  3, 4, 5, 6, 7  (firstRow =  3)
+                    const firstRow = -7 + zoneIndex * 5;
+                    const zCenter = firstRow + 2;  // middle row of zone
 
                     // Get crops for this zone
                     const cropsThisZone = [];
@@ -155,42 +158,36 @@ await client.query('COMMIT');
                         cropIndex++;
                     }
 
-                    // Distribute crop positions based on crop count
+                    // Place crops on the soil rows (one crop per row, centered on x=0)
                     let cropPositions = [];
-
-                    if (cropsThisZone.length === 1) {
-                        cropPositions = [{ x: xCenter, z: zCenter }];
-                    } else if (cropsThisZone.length === 2) {
+                    const n = cropsThisZone.length;
+                    if (n === 1) {
+                        cropPositions = [{ x: 0, z: firstRow + 2 }];
+                    } else if (n === 2) {
                         cropPositions = [
-                            { x: xCenter - 0.6, z: zCenter },
-                            { x: xCenter + 0.6, z: zCenter }
+                            { x: -1, z: firstRow + 2 },
+                            { x:  1, z: firstRow + 2 }
                         ];
-                    } else if (cropsThisZone.length === 3) {
+                    } else if (n === 3) {
                         cropPositions = [
-                            { x: xCenter - 1.2, z: zStart + 1 },
-                            { x: xCenter, z: zCenter },
-                            { x: xCenter + 1.2, z: zEnd - 1 }
+                            { x: 0, z: firstRow + 1 },
+                            { x: 0, z: firstRow + 2 },
+                            { x: 0, z: firstRow + 3 }
                         ];
-                    } else if (cropsThisZone.length === 4) {
+                    } else if (n === 4) {
                         cropPositions = [
-                            { x: xCenter - 1.2, z: zStart + 0.8 },
-                            { x: xCenter + 1.2, z: zStart + 0.8 },
-                            { x: xCenter - 1.2, z: zEnd - 0.8 },
-                            { x: xCenter + 1.2, z: zEnd - 0.8 }
+                            { x: -1, z: firstRow + 1 },
+                            { x:  1, z: firstRow + 1 },
+                            { x: -1, z: firstRow + 3 },
+                            { x:  1, z: firstRow + 3 }
                         ];
                     } else {
-                        // 5+ crops: use default 5-crop layout and add random positions
-                        cropPositions = [
-                            { x: xCenter - 1.2, z: zStart + 0.8 },
-                            { x: xCenter + 1.2, z: zStart + 0.8 },
-                            { x: xCenter, z: zCenter },
-                            { x: xCenter - 1.2, z: zEnd - 0.8 },
-                            { x: xCenter + 1.2, z: zEnd - 0.8 }
-                        ];
-                        for (let extra = 5; extra < cropsThisZone.length; extra++) {
+                        // 5+ crops: one per row
+                        cropPositions = [0, 1, 2, 3, 4].map(r => ({ x: 0, z: firstRow + r }));
+                        for (let extra = 5; extra < n; extra++) {
                             cropPositions.push({
-                                x: xCenter + (Math.random() - 0.5) * 2,
-                                z: zStart + Math.random() * 4
+                                x: (Math.random() - 0.5) * 4,
+                                z: firstRow + Math.floor(Math.random() * 5)
                             });
                         }
                     }
@@ -204,25 +201,25 @@ await client.query('COMMIT');
                         );
                     }
 
-                    // 1 Moisture Sensor in middle of zone
+                    // 1 Moisture Sensor — center of zone
                     await client.query(
                         `INSERT INTO objects (farm_id, zone_id, object_name, category, position_x, position_y, position_z, metadata)
                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                        [farmId, zone.id, 'moistureSensor', 'iot', xCenter, 0.1, zCenter, JSON.stringify({ is_running: false, sensor_value: 0 })]
+                        [farmId, zone.id, 'moistureSensor', 'iot', 0, 0.1, zCenter, JSON.stringify({ is_running: false, sensor_value: 0 })]
                     );
 
-                    // 1 Water Pump (at edge of zone)
+                    // 1 Water Pump — left side, middle of zone
                     await client.query(
                         `INSERT INTO objects (farm_id, zone_id, object_name, category, position_x, position_y, position_z, metadata)
                          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                        [farmId, zone.id, 'waterPump', 'iot', xCenter - 2, 0.1, zStart, JSON.stringify({ is_running: false, sensor_value: 0 })]
+                        [farmId, zone.id, 'waterPump', 'iot', -7, 0.1, zCenter, JSON.stringify({ is_running: false, sensor_value: 0 })]
                     );
 
-                    // 3 Sprinklers per zone
+                    // 3 Sprinklers — between rows, spread across zone width
                     const sprinklerPositions = [
-                        { x: xCenter - 1.5, z: zStart + 1.5 },
-                        { x: xCenter, z: zCenter },
-                        { x: xCenter + 1.5, z: zEnd - 1.5 }
+                        { x: -4, z: firstRow + 0.5 },  // between row 1 & 2, left
+                        { x:  0, z: firstRow + 2.5 },  // between row 3 & 4, center
+                        { x:  4, z: firstRow + 3.5 },  // between row 4 & 5, right
                     ];
                     for (const pos of sprinklerPositions) {
                         await client.query(
@@ -242,18 +239,18 @@ await client.query('COMMIT');
                     );
                 }
 
-                // Global Fan (if hardware supports it)
+                // Global Fan — outside the bottom-right corner of the fence
                 await client.query(
                     `INSERT INTO objects (farm_id, object_name, category, position_x, position_y, position_z, metadata)
                      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                    [farmId, 'fan', 'iot', 4, 0, -4, JSON.stringify({ is_running: false, sensor_value: 0 })]
+                    [farmId, 'fan', 'iot', 9, 0, -8, JSON.stringify({ is_running: false, sensor_value: 0 })]
                 );
 
-                // Global Street Light (if no zone )
+                // Global Street Light — outside the top-left corner of the fence, arm points into the farm
                 await client.query(
                     `INSERT INTO objects (farm_id, object_name, category, position_x, position_y, position_z, metadata)
                      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                    [farmId, 'streetLight', 'iot', -4, 2, 4, JSON.stringify({ is_running: false, sensor_value: 0 })]
+                    [farmId, 'streetLight', 'iot', -10, 0, 9, JSON.stringify({ is_running: false, sensor_value: 0 })]
                 );
 
                 await client.query('COMMIT');
@@ -325,7 +322,9 @@ await client.query('COMMIT');
                 return res.status(403).json({ message: 'Forbidden' });
             }
 
-            const command = { type: 'control', device, zone_id: null, state: state ? 1 : 0 };
+            // state: true→1, false→0, null→-1 (resume auto)
+            const espState = state === null ? -1 : (state ? 1 : 0);
+            const command = { type: 'control', device, zone_id: null, state: espState };
             const sent = sendCommandToDevice(farm.hardware_id, command);
 
             if (!sent) {
