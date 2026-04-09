@@ -75,6 +75,20 @@ describe('Farm Controller', () => {
             farm: { id: 100, name: 'New Farm' }
         }));
     });
+    test('create should return 401 if userId is missing', async () => {
+        req.user = {};
+        await farmController.create(req, res);
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized: User ID not found' });
+    });
+
+    test('create should return 400 if required fields are missing', async () => {
+        req.body = { name: 'Farm', location: 'Loc' }; // missing hardware_id, latitude, longitude
+        await farmController.create(req, res);
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Missing required fields (name, location, hardware_id, or coordinates)' });
+    });
+
 
     test('delete should return 200 and call farmService.deleteFarm on success', async () => {
         req.params = { farmId: '100' }; 
@@ -91,6 +105,29 @@ describe('Farm Controller', () => {
             message: 'Farm deleted successfully.',
             farm: mockDeletedFarm
         });
+    });
+
+    test('delete should return 400 for invalid farmId', async () => {
+        req.params = { farmId: 'abc' };
+        await farmController.delete(req, res);
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ message: 'Invalid farm ID.' });
+    });
+
+    test('delete should return 404 if not found', async () => {
+        req.params = { farmId: '100' };
+        farmService.deleteFarm.mockRejectedValueOnce(new Error('not found'));
+        await farmController.delete(req, res);
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ message: 'not found' });
+    });
+
+    test('delete should return 400 for other errors', async () => {
+        req.params = { farmId: '100' };
+        farmService.deleteFarm.mockRejectedValueOnce(new Error('some error'));
+        await farmController.delete(req, res);
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ message: 'some error' });
     });
 
     test('getAllForUser should return 200 with list of farms', async () => {

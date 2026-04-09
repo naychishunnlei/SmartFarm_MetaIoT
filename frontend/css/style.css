@@ -103,15 +103,15 @@ body {
 }
 
 .modal .btn-primary {
-    background: var(--primary-color);
-    color: #fff;
+    background: #fff;
+    color: var(--primary-color);
     font-weight: bold;
     border: none;
 }
 
 .modal .btn-primary:hover:not(:disabled) {
     transform: translateY(-2px);
-    background: var(--secondary-color);
+    /* background: var(--secondary-color); */
     color: #fff;
 }
 

@@ -143,6 +143,17 @@ describe('Object Service', () => {
             await expect(objectService.deleteObject(1, 1, 999))
                 .rejects.toThrow('Object not found on this farm.');
         });
+        test('should throw forbidden error if user does not own farm', async () => {
+            const userId = 1;
+            const farmId = 1;
+            const objectId = 100;
+            const mockFarm = { id: 1, user_id: 2, name: 'Not My Farm' };
+            farmRepository.findById.mockResolvedValue(mockFarm);
+
+            await expect(objectService.deleteObject(userId, farmId, objectId))
+                .rejects.toThrow('Forbidden: You do not have permission on this farm.');
+        });
+        
     });
 
     describe('updateObjectGrowth', () => {
@@ -198,6 +209,22 @@ describe('Object Service', () => {
             expect(objectRepository.updateIsRunning).toHaveBeenCalledWith(objectId, isRunning);
             expect(result).toEqual(mockUpdatedObject);
         });
+
+        test('should throw forbidden error if user does not own farm', async () => {
+            const mockFarm = { id: 1, user_id: 2, name: 'Not My Farm' };
+            farmRepository.findById.mockResolvedValue(mockFarm);
+            await expect(objectService.toggleDevice(1, 1, 100, true))
+                .rejects.toThrow('forbidden');
+        });
+        test('should throw error if object not found', async () => {
+            const mockFarm = { id: 1, user_id: 1, name: 'My Farm' };
+            farmRepository.findById.mockResolvedValue(mockFarm);
+            objectRepository.findById.mockResolvedValue(null);
+            await expect(objectService.toggleDevice(1, 1, 100, true))
+                .rejects.toThrow('Object not found');
+        });
+
+        
     });
 
     describe('updateSensorData', () => {
