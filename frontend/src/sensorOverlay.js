@@ -53,10 +53,7 @@ function updateObjectUserData(farm, zones) {
             obj.userData.sensorValue = pct;
         }
 
-        // Fan & light actuator state — skip if user has manually overridden
-        if (type === 'fan' && farm) {
-            obj.userData.isRunning = farm.fanOn;
-        }
+        // Light actuator state — skip if user has manually overridden
         if (type === 'streetLight' && farm && !window._staticLightManualOverride) {
             obj.userData.isRunning = farm.lightOn;
         }
@@ -93,7 +90,7 @@ export function updateFloatingLabels() {
         const id   = obj.userData.id || obj.uuid;
 
         // Only show labels on IoT sensors/actuators
-        const showTypes = ['moistureSensor','tempSensor','humiditySensor','waterPump','fan','streetLight'];
+        const showTypes = ['moistureSensor','tempSensor','humiditySensor','waterPump','streetLight'];
         if (!showTypes.includes(type)) return;
 
         seen.add(id);
@@ -195,12 +192,6 @@ function buildLabelHTML(obj) {
             const soilDry = pct2 < 30;
             const tankWarning = !on && soilDry && tankLow ? `<span style="margin-left:4px;font-size:9px;color:#ff6644;">⚠️tank</span>` : '';
             return `<span class="label-icon">${emoji}</span><span style="color:${on ? '#44ff88' : '#aaaaaa'}">${on ? 'ON' : 'OFF'}</span>${tankWarning}<span style="margin-left:4px;font-size:9px;opacity:0.7">${obj.userData.manualOverride ? '🔧' : ''}</span>`;
-        }
-
-        case 'fan': {
-            if (!isSensorOnline()) return `<span class="label-icon">🌀</span><span style="color:#888">--</span>`;
-            const on = farm?.fanOn;
-            return `<span class="label-icon">🌀</span><span style="color:${on ? '#44ff88' : '#aaaaaa'}">${on ? 'ON' : 'OFF'}</span>`;
         }
 
         case 'streetLight': {
@@ -313,9 +304,6 @@ function updateSidePanel(farm, zones) {
         const online = isSensorOnline();
         const lightOn = online ? (window._currentStaticLightState ?? f.lightOn) : false;
         const isManualLight = !!window._staticLightManualOverride;
-        const fanObj = objectsRef?.find(o => o.userData.type === 'fan');
-        const fanOn = online ? (fanObj ? fanObj.userData.isRunning : f.fanOn) : false;
-        const isManualFan = !!fanObj?.userData?.manualOverride;
 
         const tankLow = online && f.tankLow;
         farmStatsEl.innerHTML = `
@@ -324,16 +312,6 @@ function updateSidePanel(farm, zones) {
                 <div class="zone-stat"><span class="zone-stat-label">Temp</span><span class="zone-stat-value">${online ? f.temperature?.toFixed(1) + '°C' : '--'}</span></div>
                 <div class="zone-stat"><span class="zone-stat-label">Humidity</span><span class="zone-stat-value">${online ? f.humidity?.toFixed(0) + '%' : '--'}</span></div>
                 <div class="zone-stat"><span class="zone-stat-label">Tank</span><span class="zone-stat-value" style="color:${online ? (tankLow ? '#ff4444' : '#44ff88') : '#888'}">${online ? (tankLow ? '🔴 LOW' : '🟢 OK') : '--'}</span></div>
-                <div class="zone-stat" style="grid-column: span 2; display:flex; align-items:center; justify-content:space-between;">
-                    <div>
-                        <span class="zone-stat-label">Fan${isManualFan ? ' 🔧' : ''}</span>
-                        <span class="zone-stat-value" style="margin-top:4px;">${online ? (fanOn ? '🟢 ON' : '⚫ OFF') : '⚫ --'}</span>
-                    </div>
-                    <div style="display:flex; gap:6px;">
-                        ${online && fanObj ? ctrlBtn(fanOn ? 'Turn OFF' : 'Turn ON', `window._manualToggleFan(${!fanOn})`, fanOn ? '#cc4444' : '#44bb66') : ''}
-                        ${isManualFan ? ctrlBtn('Auto', `window._resumeAutoFan()`, '#555') : ''}
-                    </div>
-                </div>
                 <div class="zone-stat" style="grid-column: span 2; display:flex; align-items:center; justify-content:space-between;">
                     <div>
                         <span class="zone-stat-label">Light${isManualLight ? ' 🔧' : ''}</span>
@@ -472,7 +450,7 @@ export function handleSensorClick(object, clickX, clickY) {
     const type = object?.userData?.type;
     if (!type) return;
 
-    const showTypes = ['moistureSensor','tempSensor','humiditySensor','waterPump','fan','sprinkler','streetLight'];
+    const showTypes = ['moistureSensor','tempSensor','humiditySensor','waterPump','sprinkler','streetLight'];
     const isCrop = object?.userData?.category === 'crops';
     if (!showTypes.includes(type) && !isCrop) return;
 
@@ -533,16 +511,6 @@ window._clearOverride = async function() {
     if (type === 'waterPump' || type === 'sprinkler') {
         // Delegate to zone resume so sprinklers sync too
         await window._resumeZonePump(zoneId);
-    } else if (type === 'fan') {
-        inspectTarget.userData.manualOverride = false;
-        const farm = getLatestFarmData();
-        const shouldBeOn = farm ? farm.temperature > 24 : false;
-        const farmId = localStorage.getItem('selectedFarmId');
-        const objectId = inspectTarget.userData.dbId;
-        if (farmId && objectId) {
-            try { await toggleDevice(farmId, objectId, shouldBeOn); } catch(e) {}
-        }
-        inspectTarget.userData.isRunning = shouldBeOn;
     } else if (type === 'streetLight') {
         // Clear override — delegate to farm-core's auto-light resume
         inspectTarget.userData.manualOverride = false;
@@ -650,19 +618,6 @@ function showInspectPanel(obj, clickX, clickY) {
             content += row('Raw ADC',  raw);
             break;
         }
-        case 'fan':
-            content += row('Status', farm?.fanOn ? '🟢 Running' : '⚫ Off');
-            content += row('Trigger', farm?.temperature > 24 ? 'Temp > 24°C' : 'Normal');
-            const fanObj = obj;
-            if (fanObj) {
-                const isOn = fanObj.userData.isRunning;
-                if (fanObj.userData.manualOverride) content += row('Mode', '🔧 Manual Override');
-                content += overrideBtn(!isOn);
-                if (fanObj.userData.manualOverride) {
-                    content += `<button onclick="window._clearOverride()" style="margin-top:4px; width:100%; background:rgba(255,255,255,0.07); border:none; color:#aaa; padding:5px; border-radius:6px; cursor:pointer; font-size:11px;">↩ Resume Auto</button>`;
-                }
-            }
-            break;
         case 'waterPump':
         case 'sprinkler': {
             const pct = zone ? Math.max(0, Math.min(100, 100 - (zone.moisture / 4095) * 100)).toFixed(0) : '--';

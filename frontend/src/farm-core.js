@@ -52,7 +52,6 @@ const objectConfigs = {
     tempSensor: { name: 'Temperature Sensor', emoji: '🌡️', category: 'iot' },
     waterPump: { name: 'Water Pump', emoji: '⛽', category: 'iot' },
     sprinkler: { name: 'Sprinkler', emoji: '💦', category: 'iot' },
-    fan: { name: 'Fan', emoji: '🌀', category: 'iot' },
     streetLight: {name: 'Street Light', emoji: '💡', category: 'iot'},
     // Animals
     chicken: { name: 'Chicken', emoji: '🐔', category: 'animals' },
@@ -83,7 +82,7 @@ function formatSensorValue(type, value) {
     return `${percentValue.toFixed(0)}%`;
 }
 
-const FARM_WIDE_TYPES = new Set(['tempSensor', 'fan', 'streetLight']);
+const FARM_WIDE_TYPES = new Set(['tempSensor', 'streetLight']);
 
 // Maps DB zone ID → zone name (e.g. 2 → "Zone 1")
 // Populated during init() using the zones API so that display names
@@ -132,7 +131,7 @@ function computeZoneStatus(summary) {
 // Types treated as zone-level sensors (not actuators)
 const SENSOR_IOT_TYPES = new Set(['moistureSensor', 'tempSensor', 'humiditySensor']);
 // Types treated as actuators
-const ACTUATOR_IOT_TYPES = new Set(['waterPump', 'sprinkler', 'fan', 'streetLight']);
+const ACTUATOR_IOT_TYPES = new Set(['waterPump', 'sprinkler', 'streetLight']);
 
 function summarizeZones() {
     const isOnline = isSensorOnline();
@@ -778,39 +777,6 @@ window._resumeAutoStaticLight = async function() {
     if (window._refreshSidePanel) window._refreshSidePanel();
 };
 
-// ─── FAN CONTROL (dashboard) ──────────────────────────────────────────────────
-window._manualToggleFan = async function(isOn) {
-    const farmId = localStorage.getItem('selectedFarmId');
-    if (!farmId) return;
-    const fanObj = objects.find(o => o.userData.type === 'fan' && o.userData.dbId);
-    if (!fanObj) return;
-    try {
-        await toggleDevice(farmId, fanObj.userData.dbId, isOn);
-        fanObj.userData.isRunning = isOn;
-        fanObj.userData.manualOverride = true;
-        if (window._refreshSidePanel) window._refreshSidePanel();
-    } catch (e) {
-        console.warn('[Fan] Failed to toggle:', e);
-    }
-};
-
-window._resumeAutoFan = async function() {
-    const farmId = localStorage.getItem('selectedFarmId');
-    const fanObj = objects.find(o => o.userData.type === 'fan' && o.userData.dbId);
-    if (!fanObj) return;
-    fanObj.userData.manualOverride = false;
-    const farm = getLatestFarmData();
-    const shouldBeOn = farm ? farm.temperature > 24 : false;
-    if (farmId) {
-        try {
-            await toggleDevice(farmId, fanObj.userData.dbId, shouldBeOn);
-        } catch (e) {
-            console.warn('[Fan] Failed to resume auto:', e);
-        }
-    }
-    fanObj.userData.isRunning = shouldBeOn;
-    if (window._refreshSidePanel) window._refreshSidePanel();
-};
 
 function createIrrigationSystem() {
     const tankMaterial = new THREE.MeshStandardMaterial({ color: 0x2196F3, roughness: 0.3, metalness: 0.2 });
@@ -1132,11 +1098,6 @@ function animate() {
                     lifetimes[i] = obj.waterEffect.maxLifetime + 1;
                 }
             }
-        }
-
-        // Rotate fan blades when running
-        if (obj.userData.type === 'fan' && obj.userData.isRunning && obj.fanBlades) {
-            obj.fanBlades.rotation.z += 0.08;
         }
 
         // Static street light is controlled via applyStaticLightState / window helpers — no DB object needed

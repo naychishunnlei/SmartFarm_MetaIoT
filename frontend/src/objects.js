@@ -22,7 +22,6 @@ export function createObject(type, position) {
         case 'humiditySensor': createHumiditySensor(group); break;
         case 'waterPump': createWaterPump(group); break;
         case 'sprinkler': createSprinkler(group); break;
-        case 'fan': createFan(group); break;
         case 'streetLight' : createStreetLight(group); break;
         // Animals
         case 'chicken': createChicken(group); break;
@@ -786,67 +785,6 @@ function createStreetLight(group) {
     group.userData.isRunning = false;
 }
 
-
-function createFan(group) {
-    const metalMaterial = new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.5, metalness: 0.7 });
-    const bladeMaterial = new THREE.MeshStandardMaterial({ color: 0xddeeff, roughness: 0.3, metalness: 0.2, side: THREE.DoubleSide });
-    const baseMaterial  = new THREE.MeshStandardMaterial({ color: 0x333344, roughness: 0.6, metalness: 0.8 });
-
-    // ── Base (flat disk on the ground) ──
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.08, 16), baseMaterial);
-    base.position.y = 0.04;
-    base.castShadow = true;
-    group.add(base);
-
-    // ── Vertical pole ──
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.5, 8), metalMaterial);
-    pole.position.y = 0.83;   // bottom at 0.08, top at 1.58
-    pole.castShadow = true;
-    group.add(pole);
-
-    // ── Neck (tilt joint) ──
-    const neck = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), metalMaterial);
-    neck.position.y = 1.58;
-    group.add(neck);
-
-    // ── Motor hub (center of blades) ──
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.15, 8), metalMaterial);
-    hub.rotation.x = Math.PI / 2;   // faces forward (+Z)
-    hub.position.y = 1.65;
-    group.add(hub);
-
-    // ── Guard ring ──
-    const guard = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.035, 8, 32), metalMaterial);
-    guard.position.y = 1.65;
-    // guard already faces +Z by default (torus lies in XY plane)
-    group.add(guard);
-
-    // ── Blades group — rotates around Z axis (faces forward) ──
-    const fanGroup = new THREE.Group();
-    fanGroup.position.y = 1.65;
-    fanGroup.name = 'bladeGroup';
-
-    for (let i = 0; i < 3; i++) {
-        const blade = new THREE.Mesh(
-            new THREE.BoxGeometry(0.44, 0.06, 0.16),
-            bladeMaterial
-        );
-        // Spread blades 120° apart around Z axis
-        blade.rotation.z = (i / 3) * Math.PI * 2;
-        // Offset each blade from center so it sits inside the guard
-        blade.position.set(
-            Math.cos((i / 3) * Math.PI * 2) * 0.22,
-            Math.sin((i / 3) * Math.PI * 2) * 0.22,
-            0
-        );
-        blade.castShadow = true;
-        fanGroup.add(blade);
-    }
-
-    group.add(fanGroup);
-    group.fanBlades = fanGroup;
-    group.userData.isRunning = false;
-}
 
 // ==================== ANIMALS ====================
 

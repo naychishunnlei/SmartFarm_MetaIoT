@@ -61,7 +61,7 @@ export function setupEventListeners(context) {
     async function handleToggleClick() {
         if (contextMenuTarget) {
             const objectType = contextMenuTarget.userData.type;
-            const toggleableTypes = ['sprinkler', 'waterPump', 'fan', 'streetLight'];
+            const toggleableTypes = ['sprinkler', 'waterPump', 'streetLight'];
             
             if (toggleableTypes.includes(objectType)) {
                 const newState = !contextMenuTarget.userData.isRunning;
@@ -190,7 +190,7 @@ export function setupEventListeners(context) {
         if (nameElement) nameElement.textContent = objectName;
 
         const sensors = ['moistureSensor', 'tempSensor', 'humiditySensor'];
-        const actuators = ['sprinkler', 'waterPump', 'fan', 'streetLight'];
+        const actuators = ['sprinkler', 'waterPump', 'streetLight'];
 
         //Handle IoT Sensors
         if (category === 'iot' && sensors.includes(objectType)) {
@@ -442,18 +442,11 @@ export function setupEventListeners(context) {
                 }
             }
         } else if (selectedObjectType) {
-            //allow fan to be placed on existing objs
             const intersectTargets = [ground, ...objects]
 
             const intersects = raycaster.intersectObjects(intersectTargets, true)
             const validIntersects = intersects.filter(hit => {
-                 if (selectedObjectType === 'fan') {
-                    return true
-                }
-
-                if (hit.object === ground) {
-                    return true
-                }
+                if (hit.object === ground) return true
                 return hit.point.y < 2.5 && hit.face && hit.face.normal.y > 0.5
             })
 
@@ -462,18 +455,12 @@ export function setupEventListeners(context) {
                 const point = intersection.point.clone();
                 point.x = Math.round(point.x * 2) / 2;
                 point.z = Math.round(point.z * 2) / 2;
-               
-                if (selectedObjectType !== 'fan') {
-                    point.y = intersection.point.y; 
-                } else {
-                    point.y = intersection.point.y + 0.05;
-                }
-
+                point.y = intersection.point.y;
 
                 if (Math.abs(point.x) < 40 && Math.abs(point.z) < 40) {
                     const category = objectConfigs[selectedObjectType]?.category || 'unknown';
 
-                    // IoT devices (except tempSensor, fan, streetLight which are farm-wide) need zone selection
+                    // IoT devices (except tempSensor, streetLight which are farm-wide) need zone selection
                     const ZONE_REQUIRED_TYPES = new Set(['moistureSensor', 'sprinkler', 'waterPump']);
 
                     if (category === 'iot' && ZONE_REQUIRED_TYPES.has(selectedObjectType)) {

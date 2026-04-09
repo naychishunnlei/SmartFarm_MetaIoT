@@ -239,13 +239,6 @@ await client.query('COMMIT');
                     );
                 }
 
-                // Global Fan — outside the bottom-right corner of the fence
-                await client.query(
-                    `INSERT INTO objects (farm_id, object_name, category, position_x, position_y, position_z, metadata)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                    [farmId, 'fan', 'iot', 9, 0, -8, JSON.stringify({ is_running: false, sensor_value: 0 })]
-                );
-
                 // Global Street Light — outside the top-left corner of the fence, arm points into the farm
                 await client.query(
                     `INSERT INTO objects (farm_id, object_name, category, position_x, position_y, position_z, metadata)
