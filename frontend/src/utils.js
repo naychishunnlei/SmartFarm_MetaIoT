@@ -568,8 +568,8 @@ export function setupEventListeners(context) {
     }
 
     async function onPointerUp() {
+        if (controls) controls.enabled = true;  // always re-enable, even if drag was cancelled
         if (!dragObject) return;
-        if (controls) controls.enabled = true;
 
         if (isDragging) {
             // Save new position to DB
@@ -597,6 +597,9 @@ export function setupEventListeners(context) {
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
+    // Catch pointerup when the cursor leaves the canvas mid-drag
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
     renderer.domElement.addEventListener('click', onCanvasClick);
     renderer.domElement.addEventListener('contextmenu', onCanvasRightClick);
 

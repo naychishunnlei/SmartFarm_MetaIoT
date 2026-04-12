@@ -2,11 +2,13 @@
 #include "time.h"
 #include "DHT.h"
 #include <WebSocketsClient.h>
+#include "esp_eap_client.h"   // WPA2-Enterprise support
 
 // ---------------- CONFIG ----------------
-const char* ssid     = "4GMIFI_3131";
-const char* password = "1234567890";
-const char* ws_host  = "192.168.0.57";
+const char* ssid     = "KMITL-Legacy";
+const char* eap_user = "66011534";
+const char* eap_pass = "applEjuice987@";
+const char* ws_host  = "10.66.7.250";
 const uint16_t ws_port = 5001;
 
 const char* ntpServer       = "pool.ntp.org";
@@ -22,9 +24,9 @@ const int   daylightOffset_sec = 0;
 #define YELLOW_LED_PIN  4
 #define FAN_RELAY       19
 #define LIGHT_RELAY     23
-#define BUTTON_PUMP_PIN 32   // Manual override: pump (zone 1)
-#define BUTTON_FAN_PIN  21   // Manual override: fan
-#define BUTTON_LIGHT_PIN 22  // Manual override: light
+#define BUTTON_PUMP_PIN  32   // Manual override: pump (zone 1)
+#define BUTTON_FAN_PIN   21   // Manual override: fan
+#define BUTTON_LIGHT_PIN 22   // Manual override: light
 
 // ---------------- THRESHOLDS ----------------
 const int DRY_THRESHOLD = 2500;
@@ -40,27 +42,24 @@ struct Zone {
 
 Zone zones[] = {
   {1, 33, 18, 0},
-  {2, 34, 5, 0},
+  //{2, 34, 5, 0},
 };
 const int activeZones = sizeof(zones) / sizeof(zones[0]);
 
 // ---------------- GLOBALS ----------------
-bool  tankIsLow      = false;
-float currentTemp    = 0.0;
+bool  tankIsLow       = false;
+float currentTemp     = 0.0;
 float currentHumidity = 0.0;
 
 bool lastPumpState[sizeof(zones) / sizeof(zones[0])] = {};
-bool lastFanState  = false;
+bool lastFanState   = false;
 bool lastLightState = false;
 
 // ---------------- MANUAL OVERRIDE FLAGS ----------------
-// Each flag means: "user pressed the physical button, auto-logic is suspended"
-// Pressing the button again toggles back to auto mode.
 bool pumpManualOverride  = false;
 bool fanManualOverride   = false;
 bool lightManualOverride = false;
 
-// The manually-commanded state when override is active
 bool pumpManualState  = false;
 bool fanManualState   = false;
 bool lightManualState = false;
@@ -71,19 +70,40 @@ unsigned long lastFanButtonTime   = 0;
 unsigned long lastLightButtonTime = 0;
 const unsigned long DEBOUNCE_MS   = 250;
 
-// Previous raw button readings (for edge detection)
 bool lastPumpButtonRaw  = HIGH;
 bool lastFanButtonRaw   = HIGH;
 bool lastLightButtonRaw = HIGH;
 
-bool alarmActive   = false;
-bool buzzerDone    = false;
+bool alarmActive = false;
+bool buzzerDone  = false;
 unsigned long alarmStartTime = 0;
 
 String hardwareID = "";
 
 DHT dht(DHTPIN, DHTTYPE);
 WebSocketsClient webSocket;
+
+// ---------------- WIFI RECONNECT ----------------
+void ensureWiFiConnected() {
+  if (WiFi.status() == WL_CONNECTED) return;
+
+  Serial.println("[WiFi] Lost connection — reconnecting...");
+  WiFi.disconnect();
+  WiFi.begin(ssid);
+
+  int retries = 0;
+  while (WiFi.status() != WL_CONNECTED && retries < 20) {
+    delay(500);
+    Serial.print(".");
+    retries++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("\n[WiFi] Reconnected — IP: %s\n", WiFi.localIP().toString().c_str());
+  } else {
+    Serial.println("\n[WiFi] Reconnect failed — will retry next cycle");
+  }
+}
 
 // ---------------- ALARM LOGIC ----------------
 void updateAlarm() {
@@ -92,10 +112,10 @@ void updateAlarm() {
 
     if (!buzzerDone) {
       if (!alarmActive) {
-        alarmActive = true;
+        alarmActive    = true;
         alarmStartTime = millis();
         digitalWrite(BUZZER_PIN, LOW);
-        Serial.println("[ALARM] Tank LOW — Buzzer ON (Low Trigger)");
+        Serial.println("[ALARM] Tank LOW — Buzzer ON");
       }
 
       if (millis() - alarmStartTime >= 3000) {
@@ -110,7 +130,7 @@ void updateAlarm() {
     digitalWrite(BUZZER_PIN, HIGH);
 
     if (buzzerDone || alarmActive) {
-      Serial.println("[ALARM] Tank OK — Resetting logic");
+      Serial.println("[ALARM] Tank OK — Resetting alarm");
     }
 
     alarmActive = false;
@@ -125,8 +145,8 @@ void updateLight() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) return;
 
-  int  hour             = timeinfo.tm_hour;
-  bool lightShouldBeOn  = (hour >= 18 || hour < 6);
+  int  hour            = timeinfo.tm_hour;
+  bool lightShouldBeOn = (hour >= 18 || hour < 6);
 
   if (lightShouldBeOn != lastLightState) {
     digitalWrite(LIGHT_RELAY,    lightShouldBeOn ? LOW  : HIGH);
@@ -135,13 +155,18 @@ void updateLight() {
   }
 }
 
+// ---------------- WEBSOCKET LOOP TASK ----------------
+// Dedicated task on Core 0 so webSocket.loop() is never starved
+// by FreeRTOS tasks running on Core 1.
+void wsLoopTask(void *pvParameters) {
+  for (;;) {
+    ensureWiFiConnected();
+    webSocket.loop();
+    vTaskDelay(1 / portTICK_PERIOD_MS);  // yield every 1 ms
+  }
+}
+
 // ---------------- BUTTON HANDLER TASK ----------------
-// Polls all three override buttons. Each button press:
-//   • If NOT in manual override  → enter override, force device ON
-//   • If already in manual override, device is ON  → turn it OFF (keep override)
-//   • If already in manual override, device is OFF → exit override (resume auto)
-// Net effect: first press = force ON, second press = force OFF, third press = back to auto.
-// You can simplify to a 2-step (toggle override) if preferred.
 void buttonHandlerTask(void *pvParameters) {
   for (;;) {
     unsigned long now = millis();
@@ -153,7 +178,6 @@ void buttonHandlerTask(void *pvParameters) {
       lastPumpButtonTime = now;
 
       if (!pumpManualOverride) {
-        // Enter override → turn pump ON (zone 1 only; safety: block if tank low)
         if (!tankIsLow) {
           pumpManualOverride = true;
           pumpManualState    = true;
@@ -164,16 +188,13 @@ void buttonHandlerTask(void *pvParameters) {
           Serial.println("[BTN] Pump override blocked (tank low)");
         }
       } else if (pumpManualState) {
-        // Override active + ON → turn OFF, stay in override
         pumpManualState  = false;
         digitalWrite(zones[0].pumpPin, HIGH);
         lastPumpState[0] = false;
         Serial.println("[BTN] Pump → Manual OFF");
       } else {
-        // Override active + OFF → exit override, resume auto
         pumpManualOverride = false;
-        // Force controlLogicTask to re-evaluate by dirtying lastPumpState
-        lastPumpState[0] = !lastPumpState[0];
+        lastPumpState[0]   = !lastPumpState[0];  // dirty flag → auto re-evaluates
         Serial.println("[BTN] Pump → Auto mode resumed");
       }
     }
@@ -198,7 +219,7 @@ void buttonHandlerTask(void *pvParameters) {
         Serial.println("[BTN] Fan → Manual OFF");
       } else {
         fanManualOverride = false;
-        lastFanState      = !lastFanState;   // dirty flag → auto re-evaluates
+        lastFanState      = !lastFanState;  // dirty flag → auto re-evaluates
         Serial.println("[BTN] Fan → Auto mode resumed");
       }
     }
@@ -225,13 +246,13 @@ void buttonHandlerTask(void *pvParameters) {
         Serial.println("[BTN] Light → Manual OFF");
       } else {
         lightManualOverride = false;
-        lastLightState      = !lastLightState;   // dirty flag → updateLight() re-evaluates
+        lastLightState      = !lastLightState;  // dirty flag → updateLight() re-evaluates
         Serial.println("[BTN] Light → Auto mode resumed");
       }
     }
     lastLightButtonRaw = lightRaw;
 
-    vTaskDelay(10 / portTICK_PERIOD_MS);   // 10 ms poll — responsive but cheap
+    vTaskDelay(10 / portTICK_PERIOD_MS);  // 10 ms poll — responsive but cheap
   }
 }
 
@@ -291,7 +312,7 @@ void controlLogicTask(void *pvParameters) {
     updateAlarm();
     updateLight();
 
-    // Auto pump — skipped per zone if manual override is active (zone 1 only for now)
+    // Auto pump — skipped per zone if manual override is active
     for (int i = 0; i < activeZones; i++) {
       bool isOverridden = (i == 0 && pumpManualOverride);
       if (isOverridden) continue;
@@ -349,10 +370,10 @@ void sendDataTask(void *pvParameters) {
         json += "\"temperature\":"   + tempStr + ",";
         json += "\"humidity\":"      + humStr  + ",";
         json += "\"moisture_1\":"    + String(zones[i].moisture) + ",";
-        json += "\"pump\":"          + String(pumpOn     ? "true" : "false") + ",";
-        json += "\"fan\":"           + String(fanOn      ? "true" : "false") + ",";
-        json += "\"light\":"         + String(lightOn    ? "true" : "false") + ",";
-        json += "\"tank_low\":"      + String(tankIsLow  ? "true" : "false");
+        json += "\"pump\":"          + String(pumpOn    ? "true" : "false") + ",";
+        json += "\"fan\":"           + String(fanOn     ? "true" : "false") + ",";
+        json += "\"light\":"         + String(lightOn   ? "true" : "false") + ",";
+        json += "\"tank_low\":"      + String(tankIsLow ? "true" : "false");
         json += "}";
 
         bool sent = webSocket.sendTXT(json);
@@ -363,7 +384,7 @@ void sendDataTask(void *pvParameters) {
       Serial.println("[WS] Not connected — skipping send");
     }
 
-    vTaskDelay(6000 / portTICK_PERIOD_MS);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 
@@ -428,7 +449,6 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
                 Serial.printf("├─ [PUMP] Zone %d → ON blocked (tank low)\n", zone_id);
                 break;
               }
-              // Remote command clears the physical button override for this zone
               if (i == 0) {
                 pumpManualOverride = false;
                 pumpManualState    = false;
@@ -442,7 +462,6 @@ void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
           }
         } else if (device == "fan" && state >= 0) {
           bool turnOn = (state == 1);
-          // Remote command clears the physical button override
           fanManualOverride = false;
           fanManualState    = false;
           digitalWrite(FAN_RELAY, turnOn ? LOW : HIGH);
@@ -501,15 +520,23 @@ void setup() {
   dht.begin();
   Serial.println("[BOOT] DHT11 initialized");
 
-  // WiFi
+  // ── WPA2-Enterprise WiFi ─────────────────────────────────────
+  WiFi.disconnect(true);
   WiFi.mode(WIFI_STA);
-  Serial.printf("[BOOT] Connecting to WiFi: %s\n", ssid);
-  WiFi.begin(ssid, password);
+
+  esp_eap_client_set_identity((uint8_t *)eap_user, strlen(eap_user));
+  esp_eap_client_set_username((uint8_t *)eap_user, strlen(eap_user));
+  esp_eap_client_set_password((uint8_t *)eap_pass, strlen(eap_pass));
+  esp_wifi_sta_enterprise_enable();
+
+  Serial.printf("[BOOT] Connecting to WPA2-Enterprise WiFi: %s\n", ssid);
+  WiFi.begin(ssid);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
   Serial.printf("\n[BOOT] WiFi connected — IP: %s\n", WiFi.localIP().toString().c_str());
+  // ─────────────────────────────────────────────────────────────
 
   hardwareID = WiFi.macAddress();
   Serial.println("[BOOT] Hardware ID: " + hardwareID);
@@ -520,18 +547,23 @@ void setup() {
   Serial.printf("[BOOT] Connecting to WebSocket ws://%s:%d/ws\n", ws_host, ws_port);
   webSocket.begin(ws_host, ws_port, "/ws");
   webSocket.onEvent(webSocketEvent);
-  webSocket.setReconnectInterval(5000);
+  webSocket.setReconnectInterval(5000);                  // auto-reconnect every 5s
+  webSocket.enableHeartbeat(15000, 3000, 2);             // ping every 15s, pong timeout 3s, 2 retries
 
   // FreeRTOS tasks
+  // wsLoopTask pinned to Core 0 at priority 3 — keeps WS alive independently
+  xTaskCreatePinnedToCore(wsLoopTask,        "WSLoop",   4096, NULL, 3, NULL, 0);
+
+  // All other tasks run on Core 1 (default)
   xTaskCreate(readSensorsTask,   "Sensors", 8000, NULL, 1, NULL);
   xTaskCreate(controlLogicTask,  "Control", 4000, NULL, 1, NULL);
-  xTaskCreate(sendDataTask,      "Sender",  4000, NULL, 1, NULL);
+  xTaskCreate(sendDataTask,      "Sender",  8000, NULL, 1, NULL);  // bumped to 8000 (String heap)
   xTaskCreate(buttonHandlerTask, "Buttons", 2048, NULL, 2, NULL);
-  // Priority 2 > 1 so button presses are caught promptly
 
   Serial.println("[BOOT] All tasks started. System running.\n");
 }
 
 void loop() {
-  webSocket.loop();
+  // Intentionally empty — webSocket.loop() is handled by wsLoopTask on Core 0
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
